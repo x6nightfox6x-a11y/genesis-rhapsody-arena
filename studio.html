@@ -42,7 +42,21 @@ async function saveCurrent(play){
 $('saveCard').onclick=()=>saveCurrent(false);
 $('saveAndPlay').onclick=()=>saveCurrent(true);
 async function apply(id){try{let entry=await get(id);if(!entry)throw Error('角色不存在');let frame=$('arena'),w=frame.contentWindow;if(!w.document.getElementById('arenaIDFile'))throw Error('Arena 未加载完成');let file=new File([JSON.stringify(entry.card)],id+'.json',{type:'application/json'}),dt=new DataTransfer();dt.items.add(file);let input=w.document.getElementById('arenaIDFile');input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));tab('arena');status('正在应用 '+(entry.card.name||id)+'，请检查 Arena 角色 ID 插槽提示')}catch(e){status('应用失败：'+e.message)}}
-async function loadPublishedCards(){
+
+function tidyArenaUI(){
+ try{
+ const d=$('arena').contentDocument;if(!d||!d.body)return;
+ const slot=d.getElementById('arenaIDSlot');if(slot){slot.style.setProperty('display','none','important');}
+ const settings=d.getElementById('arenaDisplaySettings');
+ if(settings){
+ const summary=settings.querySelector('summary');if(summary)summary.textContent='⚙ 设置';
+ const lang=d.getElementById('arenaLanguage');
+ if(lang&&!settings.contains(lang)){const line=d.createElement('label');line.style.cssText='display:block;margin-top:12px';line.textContent='界面语言 ';line.append(lang);settings.append(line)}
+ }
+ }catch(e){console.warn('GRA UI arrangement',e)}
+}
+$('arena').addEventListener('load',tidyArenaUI);
+\nasync function loadPublishedCards(){
 const filenames=['Jay.downbeat.json','LEON.downbeat.json','白面神官.downbeat.json'];
 let added=0,failed=0;
 for(const filename of filenames){
