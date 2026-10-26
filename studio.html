@@ -84,7 +84,7 @@ async function apply(id){try{let entry=await get(id);if(!entry)throw Error('่ง’่
 function configureArenaPresentation(){
  try{
  const win=$('arena').contentWindow,doc=win.document;
- const style=doc.createElement('style');style.id='gra-studio-presentation';style.textContent='#arenaIDSlot,#arenaDisplaySettings,#arenaLeftDock #arenaLanguage{display:none!important}';doc.head.append(style);
+ const style=doc.createElement('style');style.id='gra-studio-presentation';style.textContent='#arenaIDSlot,#arenaDisplaySettings,#arenaLeftDock #arenaLanguage{display:none!important}#app .graveyard-camera canvas.graveyard-game-canvas{pointer-events:auto!important;touch-action:none!important}';doc.head.append(style);
  const select=$('studioLang');
  if(win.ArenaLocale){select.value=win.ArenaLocale.language;select.onchange=()=>win.ArenaLocale.set(select.value)}
  }catch(error){console.warn('Arena presentation:',error)}
