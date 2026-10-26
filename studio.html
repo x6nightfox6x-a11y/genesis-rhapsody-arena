@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GRA Studio</title><style>
 *{box-sizing:border-box}body{margin:0;background:#111017;color:#f3e9d6;font:14px system-ui,sans-serif}header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:#211b27;border-bottom:1px solid #655263}h1{font-size:18px;margin:0;color:#e5c18a}button{border:1px solid #766379;background:#302538;color:#fff0d7;padding:9px 14px;border-radius:7px;cursor:pointer}button:hover{background:#52405b}.primary{background:#695035}.active{background:#735843}#status{color:#d3c18e;font-size:12px;margin-left:auto}.panels{display:flex;height:calc(100dvh - 65px);position:relative}.panels #side{display:none}.panels.library-open #side{display:block}#side{width:280px;flex-shrink:0;background:#191820;border-right:1px solid #554755;padding:16px;overflow:auto}h2{font-size:15px;color:#e5c18a}small{color:#ab9eac}.entry{border:1px solid #4b4453;border-radius:8px;margin:9px 0;padding:10px;overflow-wrap:anywhere}.entry strong{display:block;margin-bottom:8px}.entry button{font-size:12px;padding:7px;margin:2px}.main{flex:1;min-width:0}iframe{width:100%;height:100%;border:0;background:#100e14;display:none}iframe.active{display:block}#empty{color:#a99bb2} @media(max-width:700px){header{gap:5px}#status{width:100%;margin:0}.panels{height:calc(100dvh - 103px)}#side{width:170px;padding:8px}button{padding:7px}h1{font-size:14px}}
-</style></head><body><header><h1>✦ GRA STUDIO</h1><button id="arenaTab" class="active">⚔ Arena</button><button id="editorTab">♜ ID Studio</button><button id="libraryToggle" aria-expanded="false">☰ 角色库</button><button id="saveCard" class="primary">💾 保存当前 ID 到 GRA</button><span id="status">统一角色库载入中…</span></header><div class="panels" id="panels"><aside id="side"><h2>GRA 角色库</h2><small>在 ID Studio 编辑，点上方保存。点角色的「用于 Arena」即可应用到当前选中的我方角色。</small><div id="cards"></div><p id="empty">暂无已保存 ID</p></aside><div class="main"><iframe id="arena" title="GRA Arena" src="index.html" class="active"></iframe><iframe id="editor" title="GRA ID Studio" src="Downbeat_ID_Card_Studio.html"></iframe></div></div><script>
+</style></head><body><header><h1>✦ GRA STUDIO</h1><button id="arenaTab" class="active">⚔ Arena</button><button id="editorTab">♜ ID Studio</button><button id="libraryToggle" aria-expanded="false">☰ 角色库</button><button id="saveCard" class="primary">💾 保存当前 ID 到 GRA</button><button id="saveAndPlay">▶ 保存并用于 Arena</button><span id="status">统一角色库载入中…</span></header><div class="panels" id="panels"><aside id="side"><h2>GRA 角色库</h2><small>在 ID Studio 编辑，点上方保存。点角色的「用于 Arena」即可应用到当前选中的我方角色。</small><div id="cards"></div><p id="empty">暂无已保存 ID</p></aside><div class="main"><iframe id="arena" title="GRA Arena" src="index.html" class="active"></iframe><iframe id="editor" title="GRA ID Studio" src="Downbeat_ID_Card_Studio.html"></iframe></div></div><script>
 'use strict';const $=id=>document.getElementById(id), dbName='gra-unified-studio',store='cards';let db;
 function status(t){$('status').textContent=t}function connect(){return new Promise((res,rej)=>{let q=indexedDB.open(dbName,1);q.onupgradeneeded=()=>{q.result.createObjectStore(store,{keyPath:'id'})};q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
 function tx(mode){return db.transaction(store,mode).objectStore(store)}
@@ -10,8 +10,36 @@ function all(){return new Promise((res,rej)=>{let r=tx('readonly').getAll();r.on
 function tab(which){for(let id of ['arena','editor']){$(id).classList.toggle('active',id===which);$(id+'Tab').classList.toggle('active',id===which)}}
 $('libraryToggle').onclick=()=>{let open=$('panels').classList.toggle('library-open');$('libraryToggle').setAttribute('aria-expanded',String(open));$('libraryToggle').textContent=open?'✕ 收起角色库':'☰ 角色库'};
 $('arenaTab').onclick=()=>tab('arena');$('editorTab').onclick=()=>tab('editor');
-async function render(){let entries=(await all()).sort((a,b)=>b.updated-a.updated);$('empty').hidden=entries.length>0;$('cards').replaceChildren();for(let entry of entries){let node=document.createElement('div');node.className='entry';let name=document.createElement('strong');name.textContent=entry.card.name||entry.id;node.append(name);let b=document.createElement('button');b.textContent='⚔ 用于 Arena';b.onclick=()=>apply(entry.id);node.append(b);let exp=document.createElement('button');exp.textContent='↓ 备份 JSON';exp.onclick=()=>{let blob=new Blob([JSON.stringify(entry.card,null,2)],{type:'application/json'});let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=entry.id+'.downbeat.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};node.append(exp);$('cards').append(node)}}
-$('saveCard').onclick=async()=>{try{let w=$('editor').contentWindow;if(typeof w.warmSprites==='function')await w.warmSprites();if(typeof w.normalized!=='function')throw Error('ID Studio 未载入，请点击 ID Studio 稍等');let obj=w.normalized(),card=obj?.card||obj;if(!card||typeof card!=='object')throw Error('没有可保存的角色卡');let id=String(card.id||card.name||'id-'+Date.now()).replace(/[^\w\u4e00-\u9fff-]/g,'_').slice(0,100);if(typeof w.DBCard!=='undefined'&&w.DBCard.validate)w.DBCard.validate(card);await save(id,card);await render();status('✓ 已保存 '+(card.name||id)+' 到本浏览器的 GRA 角色库')}catch(e){console.error(e);status('保存失败：'+e.message)}};
+async function render(){let entries=(await all()).sort((a,b)=>b.updated-a.updated);$('empty').hidden=entries.length>0;$('cards').replaceChildren();for(let entry of entries){let node=document.createElement('div');node.className='entry';let name=document.createElement('strong');name.textContent=entry.card.name||entry.id;node.append(name);let b=document.createElement('button');b.textContent='⚔ 用于 Arena';b.onclick=()=>apply(entry.id);node.append(b);let edit=document.createElement('button');edit.textContent='✎ 在 ID Studio 编辑';edit.onclick=()=>editCard(entry.id);node.append(edit);let exp=document.createElement('button');exp.textContent='↓ 备份 JSON';exp.onclick=()=>{let blob=new Blob([JSON.stringify(entry.card,null,2)],{type:'application/json'});let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=entry.id+'.downbeat.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};node.append(exp);$('cards').append(node)}}
+let currentEditingId=null;
+async function editCard(id){
+ try{
+ const entry=await get(id);if(!entry)throw Error('角色不存在');
+ const w=$('editor').contentWindow,input=w.document.getElementById('cardFile');
+ if(!input||!input.onchange)throw Error('ID Studio 尚未加载完成');
+ const file=new File([JSON.stringify(entry.card)],id+'.downbeat.json',{type:'application/json'});
+ const transfer=new DataTransfer();transfer.items.add(file);input.files=transfer.files;
+ await input.onchange({target:input});currentEditingId=id;
+ tab('editor');$('panels').classList.remove('library-open');
+ $('libraryToggle').setAttribute('aria-expanded','false');$('libraryToggle').textContent='☰ 角色库';
+ status('✓ '+id+' 已载入 ID Studio，可修改并保存');
+ }catch(e){console.error(e);status('打开角色失败：'+e.message)}
+}
+async function saveCurrent(play){
+ try{
+ const w=$('editor').contentWindow;
+ if(typeof w.warmSprites==='function')await w.warmSprites();
+ if(typeof w.normalized!=='function')throw Error('ID Studio 未载入');
+ const obj=w.normalized(),card=obj?.card||obj;
+ if(!card||typeof card!=='object'||card.format!=='downbeat-character')throw Error('未能获取有效的角色卡');
+ const id=currentEditingId||String(card.name||'id-'+Date.now()).replace(/[^\w\u4e00-\u9fff-]/g,'_').slice(0,100);
+ await save(id,card);currentEditingId=id;await render();
+ status('✓ 已保存 '+(card.name||id)+' 到 GRA 本地角色库');
+ if(play)await apply(id);
+ }catch(e){console.error(e);status('保存失败：'+e.message)}
+}
+$('saveCard').onclick=()=>saveCurrent(false);
+$('saveAndPlay').onclick=()=>saveCurrent(true);
 async function apply(id){try{let entry=await get(id);if(!entry)throw Error('角色不存在');let frame=$('arena'),w=frame.contentWindow;if(!w.document.getElementById('arenaIDFile'))throw Error('Arena 未加载完成');let file=new File([JSON.stringify(entry.card)],id+'.json',{type:'application/json'}),dt=new DataTransfer();dt.items.add(file);let input=w.document.getElementById('arenaIDFile');input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));tab('arena');status('正在应用 '+(entry.card.name||id)+'，请检查 Arena 角色 ID 插槽提示')}catch(e){status('应用失败：'+e.message)}}
 async function loadPublishedCards(){
 const filenames=['Jay.downbeat.json','LEON.downbeat.json','白面神官.downbeat.json'];
