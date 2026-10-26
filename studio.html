@@ -10,7 +10,23 @@ function all(){return new Promise((res,rej)=>{let r=tx('readonly').getAll();r.on
 function tab(which){for(let id of ['arena','editor']){$(id).classList.toggle('active',id===which);$(id+'Tab').classList.toggle('active',id===which)}}
 $('arenaTab').onclick=()=>tab('arena');$('editorTab').onclick=()=>tab('editor');
 async function render(){let entries=(await all()).sort((a,b)=>b.updated-a.updated);$('empty').hidden=entries.length>0;$('cards').replaceChildren();for(let entry of entries){let node=document.createElement('div');node.className='entry';let name=document.createElement('strong');name.textContent=entry.card.name||entry.id;node.append(name);let b=document.createElement('button');b.textContent='⚔ 用于 Arena';b.onclick=()=>apply(entry.id);node.append(b);let exp=document.createElement('button');exp.textContent='↓ 备份 JSON';exp.onclick=()=>{let blob=new Blob([JSON.stringify(entry.card,null,2)],{type:'application/json'});let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=entry.id+'.downbeat.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};node.append(exp);$('cards').append(node)}}
-$('saveCard').onclick=async()=>{try{let w=$('editor').contentWindow;if(typeof w.warmSprites==='function')await w.warmSprites();if(typeof w.normalized!=='function')throw Error('ID Studio 未载入，请点击 ID Studio 稍等');let obj=w.normalized(),card=obj.card;if(!card||typeof card!=='object')throw Error('没有可保存的角色卡');let id=String(card.id||card.name||'id-'+Date.now()).replace(/[^\w\u4e00-\u9fff-]/g,'_').slice(0,100);if(typeof w.DBCard!=='undefined'&&w.DBCard.validate)w.DBCard.validate(card);await save(id,card);await render();status('✓ 已保存 '+(card.name||id)+' 到本浏览器的 GRA 角色库')}catch(e){console.error(e);status('保存失败：'+e.message)}};
+$('saveCard').onclick=async()=>{try{let w=$('editor').contentWindow;if(typeof w.warmSprites==='function')await w.warmSprites();if(typeof w.normalized!=='function')throw Error('ID Studio 未载入，请点击 ID Studio 稍等');let obj=w.normalized(),card=obj?.card||obj;if(!card||typeof card!=='object')throw Error('没有可保存的角色卡');let id=String(card.id||card.name||'id-'+Date.now()).replace(/[^\w\u4e00-\u9fff-]/g,'_').slice(0,100);if(typeof w.DBCard!=='undefined'&&w.DBCard.validate)w.DBCard.validate(card);await save(id,card);await render();status('✓ 已保存 '+(card.name||id)+' 到本浏览器的 GRA 角色库')}catch(e){console.error(e);status('保存失败：'+e.message)}};
 async function apply(id){try{let entry=await get(id);if(!entry)throw Error('角色不存在');let frame=$('arena'),w=frame.contentWindow;if(!w.document.getElementById('arenaIDFile'))throw Error('Arena 未加载完成');let file=new File([JSON.stringify(entry.card)],id+'.json',{type:'application/json'}),dt=new DataTransfer();dt.items.add(file);let input=w.document.getElementById('arenaIDFile');input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));tab('arena');status('正在应用 '+(entry.card.name||id)+'，请检查 Arena 角色 ID 插槽提示')}catch(e){status('应用失败：'+e.message)}}
-connect().then(async d=>{db=d;await render();status('已连接 GRA 本地角色库')}).catch(e=>status('角色库不可用：'+e.message));
+async function loadPublishedCards(){
+const filenames=['Jay.downbeat.json','LEON.downbeat.json','白面神官.downbeat.json'];
+let added=0,failed=0;
+for(const filename of filenames){
+ try{
+  const res=await fetch('角色卡/'+encodeURIComponent(filename),{cache:'no-cache'});
+  if(!res.ok)throw Error('HTTP '+res.status);
+  const card=await res.json();
+  if(card.format!=='downbeat-character')throw Error('不是角色 ID 格式');
+  const id=String(card.name||filename.replace('.downbeat.json',''));
+  if(!(await get(id))){await save(id,card);added++}
+ }catch(e){console.warn('角色卡载入失败',filename,e);failed++}
+}
+await render();
+status('已加载 GitHub 角色库：'+filenames.length+' 张，新增 '+added+' 张'+(failed?'，失败 '+failed+' 张':''));
+}
+connect().then(async d=>{db=d;await render();await loadPublishedCards()}).catch(e=>status('角色库不可用：'+e.message));
 </script></body></html>
