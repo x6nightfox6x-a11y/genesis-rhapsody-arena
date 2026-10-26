@@ -120,14 +120,14 @@ function graSetupDeployment(){
   }catch(err){status('放置角色失败：'+err.message)}
  },true);
  // Track selected unit by clicking the map, but leave dragging/movement to Arena deployment.
- canvas.addEventListener('pointerdown',e=>{
-  if(!api.active||document.body.classList.contains('testing'))return;
+ // Window capture executes before Arena's own document-capture editor handler.
+ w.addEventListener('pointerdown',e=>{
+  if(!api.active||document.body.classList.contains('testing')||e.target!==canvas||e.button!==0)return;
   try{
    const p=api.point(e),units=api.inspect().units;
-   let best=null,dist=Infinity;
-   for(const u of units){const delta=Math.hypot(u.pos.x-p.x,u.pos.y-p.y);if(delta<dist){dist=delta;best=u}}
-   graSelectedUnit=best&&dist<=(best.def.radius||0.55)+0.4?best.id:null;
-   if(graSelectedUnit){api.choose(graSelectedUnit);status('已选中 '+best.def.name+' · 按 Delete 删除')}
+   const hit=units.find(u=>Math.hypot(u.pos.x-p.x,u.pos.y-p.y)<u.def.radius+0.25);
+   graSelectedUnit=hit?.id||null;
+   if(hit){api.choose(hit.id);status('已选中 '+hit.def.name+' · 按 Delete 删除')}
   }catch(err){console.warn('GRA select failed',err)}
  },true);
  const removeSelected=e=>{
