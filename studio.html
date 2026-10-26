@@ -124,18 +124,31 @@ function graSetupDeployment(){
   if(!api.active||document.body.classList.contains('testing'))return;
   try{
    const p=api.point(e),units=api.inspect().units;
-   const hit=units.find(u=>Math.hypot(u.pos.x-p.x,u.pos.y-p.y)<(u.def.radius||.5)+.15);
-   graSelectedUnit=hit?.id||null;
-  }catch{}
+   let best=null,dist=Infinity;
+   for(const u of units){const delta=Math.hypot(u.pos.x-p.x,u.pos.y-p.y);if(delta<dist){dist=delta;best=u}}
+   graSelectedUnit=best&&dist<=(best.def.radius||0.55)+0.4?best.id:null;
+   if(graSelectedUnit){api.choose(graSelectedUnit);status('已选中 '+best.def.name+' · 按 Delete 删除')}
+  }catch(err){console.warn('GRA select failed',err)}
  },true);
- d.addEventListener('keydown',e=>{
-  if(!api.active||document.body.classList.contains('testing')||!['Delete','Backspace'].includes(e.key))return;
-  if(e.target.closest('input,textarea,select,[contenteditable=true]'))return;
-  if(!graSelectedUnit)return;
-  e.preventDefault();e.stopImmediatePropagation();
-  const old=api.inspect().units,match=old.find(x=>x.id===graSelectedUnit);
-  if(match){api.replace(old.filter(x=>x.id!==graSelectedUnit));status('已从地图移除 '+match.def.name);graSelectedUnit=null}
- },true);
+ const removeSelected=e=>{
+  if(!['Delete','Backspace'].includes(e.key)||document.body.classList.contains('testing')||!api.active)return;
+  const target=e.target;
+  if(target?.closest?.('input,textarea,select,[contenteditable=true]')||target?.isContentEditable)return;
+  const selected=graSelectedUnit;
+  if(!selected){status('请先在地图上点击要删除的角色');return}
+  const old=api.inspect().units,match=old.find(u=>u.id===selected);
+  if(!match){graSelectedUnit=null;return}
+  try{
+   e.preventDefault();e.stopImmediatePropagation();
+   const rest=old.filter(u=>u.id!==selected);
+   if(!rest.length)api.clearAll();
+   else api.replace(rest);
+   graSelectedUnit=null;
+   status('✓ 已移除 '+match.def.name+'（仅地图单位，角色库保留）');
+  }catch(err){status('删除失败：'+err.message);console.error(err)}
+ };
+ d.defaultView.addEventListener('keydown',removeSelected,true);
+ window.addEventListener('keydown',removeSelected,true);
  return true;
 }
 function graWaitForDeployment(){
