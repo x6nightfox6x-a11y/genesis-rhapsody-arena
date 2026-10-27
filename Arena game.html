@@ -11802,7 +11802,7 @@ by('depExportGame').onclick=()=>run(()=>{
  const data=saveDefault();
  // Serialize this complete offline game, stripping only dynamic runtime DOM.
  const copy=document.documentElement.cloneNode(true);
- copy.classList.remove('deploying');copy.querySelector('body')?.classList.remove('deploying');
+ copy.classList.remove('deploying');copy.querySelector('body')?.classList.remove('deploying','arena-editing');
  const app=copy.querySelector('#app');if(app)app.replaceChildren();
  const open=copy.querySelector('#deployOpen');if(open){open.hidden=false;open.textContent='♟ 地图战役编辑';}
  const panel=copy.querySelector('#deployPanel');if(panel){panel.hidden=true;panel.querySelector('#depNotice').textContent='';}

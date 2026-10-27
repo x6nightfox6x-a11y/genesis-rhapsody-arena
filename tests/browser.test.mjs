@@ -269,6 +269,7 @@ test('full HTML export keeps map and artwork with network disabled', async t => 
   await offline.goto(pathToFileURL(file).href);
   await offline.waitForFunction(() => window.ArenaCampaignLoaded);
   assert.deepEqual(await offline.evaluate(() => DBDeployment.inspect()), original);
+  assert.equal(await offline.locator('body').evaluate(body => body.classList.contains('arena-editing')), false, 'offline games must not retain the editor HUD state');
   assert.ok(await offline.evaluate(() => ArenaMap.data.background.startsWith('data:image/png;base64,')));
   assert.equal(await offline.locator('#arena-map-runtime').getAttribute('src'), null);
   assert.deepEqual(requests, [], 'standalone export must not fetch map, schema or artwork');
