@@ -45,6 +45,9 @@ async function screenPoint(frame, team) {
 test('Studio campaign, fixed viewport, map pan and test/editor round trip', async t => {
   const { page, frame } = await studio(t);
   assert.equal(await page.locator('#campaignSelect').inputValue(), 'arena-001');
+  await page.setViewportSize({width:1240,height:720});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight),true,'wrapped Studio toolbar must not push the map below the window');
+  await page.setViewportSize({width:1440,height:900});
   assert.equal(await frame.locator('#arenaDisplaySettings .db-cinema-controls').count(), 1, 'presentation initializes after async map startup');
   await page.locator('#studioLang').selectOption('en');
   await frame.waitForFunction(() => document.querySelector('.hud-bar [data-mode="move"]').textContent.startsWith('Move'));
