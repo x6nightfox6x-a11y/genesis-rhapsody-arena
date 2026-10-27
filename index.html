@@ -5861,6 +5861,22 @@ class InputRouter {
     touch = null;
     swipeMode = false;
     swipe = null;
+    mousePreviewFrame = 0;
+    pendingMousePreview = null;
+    lastMousePreviewAt = -Infinity;
+    flushMousePreview = (now) => {
+        this.mousePreviewFrame = 0;
+        if (!this.enabled || !this.pendingMousePreview) return;
+        if (now - this.lastMousePreviewAt < 30) {
+            this.mousePreviewFrame = requestAnimationFrame(this.flushMousePreview);
+            return;
+        }
+        const point = this.pendingMousePreview;
+        this.pendingMousePreview = null;
+        this.lastMousePreviewAt = now;
+        this.handlers.onCursor(this.handlers.showAimCursor?.() ? point : null);
+        this.handlers.onMove(point);
+    };
     constructor(canvas, handlers) {
         this.canvas = canvas;
         this.handlers = handlers;
@@ -5876,6 +5892,9 @@ class InputRouter {
         window.addEventListener('keyup', this.keyUp);
     }
     detach() {
+        cancelAnimationFrame(this.mousePreviewFrame);
+        this.mousePreviewFrame = 0;
+        this.pendingMousePreview = null;
         this.canvas.removeEventListener('pointermove', this.move);
         this.canvas.removeEventListener('pointerdown', this.down);
         this.canvas.removeEventListener('pointerup', this.up);
@@ -5898,6 +5917,9 @@ class InputRouter {
     setEnabled(enabled) {
         this.enabled = enabled;
         if (!enabled) {
+            cancelAnimationFrame(this.mousePreviewFrame);
+            this.mousePreviewFrame = 0;
+            this.pendingMousePreview = null;
             this.canvas.style.cursor = '';
             this.endTouch();
             this.mouseDragId = null;
@@ -5989,8 +6011,9 @@ class InputRouter {
         if (event.pointerType !== 'touch') {
             const aiming = this.handlers.showAimCursor?.() ?? false;
             this.canvas.style.cursor = aiming ? 'none' : '';
-            this.handlers.onCursor(aiming ? point : null);
-            this.handlers.onMove(point);
+            this.pendingMousePreview = point;
+            if (!this.mousePreviewFrame)
+                this.mousePreviewFrame = requestAnimationFrame(this.flushMousePreview);
             return;
         }
         const touch = this.touch;
