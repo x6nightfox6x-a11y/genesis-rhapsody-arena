@@ -7,11 +7,12 @@ function tx(mode){return db.transaction(store,mode).objectStore(store)}
 function save(id,card){return new Promise((res,rej)=>{let r=tx('readwrite').put({id,card,updated:Date.now()});r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
 function get(id){return new Promise((res,rej)=>{let r=tx('readonly').get(id);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 function all(){return new Promise((res,rej)=>{let r=tx('readonly').getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
-function tab(which){document.body.classList.toggle('editor-mode',which==='editor');if(which==='arena'){setLibrary(false)}for(let id of ['arena','editor']){$(id).classList.toggle('active',id===which);$(id+'Tab').classList.toggle('active',id===which)}}
+function tab(which){document.body.classList.toggle('editor-mode',which==='editor');if(which==='arena'){setLibrary(false)}$('editor').contentWindow.DBSetPreviewActive?.(which==='editor');for(let id of ['arena','editor']){$(id).classList.toggle('active',id===which);$(id+'Tab').classList.toggle('active',id===which)}}
 function setLibrary(open){$('panels').classList.toggle('library-open',open);$('libraryToggle').setAttribute('aria-expanded',String(open));$('libraryToggle').textContent=open?'✕ 收起角色库':'☰ 角色库'}
 $('libraryToggle').onclick=()=>setLibrary(!$('panels').classList.contains('library-open'));
 
 $('testGame').onclick=()=>{try{const deployment=$('arena').contentWindow.DBDeployment;if(deployment?.active){const units=deployment.inspect().units;if(!units.some(u=>u.def.team==='ally')||!units.some(u=>u.def.team==='enemy'))throw Error('开始游戏至少需要一名我方角色和一名敌人');deployment.checkpoint();deployment.cancel()}tab('arena');setLibrary(false);document.body.classList.add('testing');status('游戏测试中')}catch(e){status('无法开始测试：'+e.message)}};$('endTest').onclick=()=>{document.body.classList.remove('testing');try{const d=$('arena').contentWindow.DBDeployment;if(d&&!d.active)d.begin();status('已返回部署后台')}catch(e){status('返回后台：'+e.message)}};
+$('editor').addEventListener('load',()=>$('editor').contentWindow.DBSetPreviewActive?.($('editor').classList.contains('active')));
 $('arenaTab').onclick=()=>tab('arena');$('editorTab').onclick=()=>tab('editor');
 let page=0;const pageSize=18;let libraryEntries=[];
 function preview(canvas,card){

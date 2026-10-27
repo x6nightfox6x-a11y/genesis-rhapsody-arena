@@ -60,6 +60,50 @@ test('Studio campaign, fixed viewport, map pan and test/editor round trip', asyn
   await page.locator('#endTest').click(); assert.equal(await frame.evaluate(() => DBDeployment.active), true);
   assert.deepEqual(await frame.evaluate(() => DBDeployment.inspect()), before, 'switching must preserve roster');
 });
+test('game panning owns the camera, cancels pending aim and releases pointer capture', async t => {
+  const { page, frame } = await studio(t);
+  await frame.evaluate(async () => DBDeployment.insertID(await ArenaRuntime.prepare(await (await fetch('角色卡/Jay.downbeat.json')).json())));
+  await page.locator('#testGame').click();
+  const ally = await screenPoint(frame, 'ally'); await page.mouse.click(ally.x, ally.y);
+  await frame.locator('.hud-bar [data-mode="attack"]').click();
+  await page.mouse.move(650, 400); await page.mouse.wheel(0, -350);
+  await page.mouse.down({ button: 'middle' });
+  assert.equal(await frame.evaluate(() => DBDeployment.canvas.style.cursor), 'grabbing');
+  const original = await frame.evaluate(() => DBDeployment.inspect());
+  const start = await frame.evaluate(() => DBDeployment.canvas.style.transform);
+  await page.mouse.move(710, 450, { steps: 8 });
+  const moved = await frame.evaluate(() => DBDeployment.canvas.style.transform);
+  assert.notEqual(moved, start);
+  await frame.evaluate(async () => {
+    const actor = DBDeployment.inspect().units.find(unit => unit.def.team === 'ally');
+    DBLeonCinematicCamera.select(actor.pos);
+    DBLeonCinematicCamera.flightStart(actor.pos, { x: 1, y: 1 });
+    DBLeonCinematicCamera.flightFollow({ x: 1, y: 1 });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  assert.equal(await frame.evaluate(() => DBDeployment.canvas.style.transform), moved, 'automatic camera cannot pull against a held pan');
+  await frame.evaluate(() => DBDeployment.canvas.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1, bubbles: true })));
+  await page.mouse.up({ button: 'middle' });
+  assert.equal(await frame.evaluate(() => DBDeployment.canvas.dataset.cameraPanning), undefined);
+  assert.equal(await frame.evaluate(() => DBDeployment.canvas.style.cursor), 'crosshair');
+  assert.deepEqual(await frame.evaluate(() => DBDeployment.inspect()), original, 'camera gestures must not consume AP or alter the world');
+  await page.mouse.move(650, 400); await page.keyboard.down('Shift'); await page.mouse.down();
+  await page.mouse.move(680, 440); await page.keyboard.up('Shift'); await page.mouse.up();
+  assert.equal(await frame.evaluate(() => DBDeployment.canvas.dataset.cameraPanning), undefined);
+  assert.deepEqual(await frame.evaluate(() => DBDeployment.inspect()), original);
+});
+test('ID animation pauses in the background and resumes when opened', async t => {
+  const { page } = await studio(t);
+  const editor = page.frames().find(frame => frame.url().endsWith('/Downbeat_ID_Card_Studio.html'));
+  await editor.waitForFunction(() => typeof DBSetPreviewActive === 'function');
+  await editor.evaluate(() => { window.testDrawCount=0;const draw=DBCard.draw;DBCard.draw=function(...args){window.testDrawCount++;return draw.apply(this,args);}; });
+  await page.waitForTimeout(100);const hidden=await editor.evaluate(() => window.testDrawCount);
+  await page.waitForTimeout(100);assert.equal(await editor.evaluate(() => window.testDrawCount), hidden);
+  await page.locator('#editorTab').click(); await editor.waitForFunction(before => window.testDrawCount > before, hidden);
+  await page.locator('#arenaTab').click(); await page.waitForTimeout(100);
+  const stopped=await editor.evaluate(() => window.testDrawCount);await page.waitForTimeout(100);
+  assert.equal(await editor.evaluate(() => window.testDrawCount), stopped);
+});
 for (const mode of ['melee', 'ranged']) test(`Jay ${mode} aims and damages an enemy`, async t => {
   const { page, frame } = await studio(t);
   await frame.evaluate(async mode => {
@@ -72,6 +116,7 @@ for (const mode of ['melee', 'ranged']) test(`Jay ${mode} aims and damages an en
   await page.locator('#testGame').click();
   const ally = await screenPoint(frame, 'ally'); await page.mouse.click(ally.x, ally.y);
   await frame.locator('.hud-bar [data-mode="attack"]').click();
+  assert.equal(await frame.evaluate(() => DBDeployment.canvas.style.cursor), 'crosshair', 'aim cursor activates without waiting for pointer preview');
   await frame.locator('.arena-moves button').filter({ hasText: mode === 'melee' ? '近战攻击' : '远程攻击' }).click();
   const target = await screenPoint(frame, 'enemy'); await page.mouse.move(target.x, target.y);
   assert.ok(['none', 'crosshair'].includes(await frame.evaluate(() => DBDeployment.canvas.style.cursor)), 'attack aiming must activate');
