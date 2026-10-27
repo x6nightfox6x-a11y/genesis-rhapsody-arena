@@ -84,7 +84,7 @@ async function apply(id){try{let entry=await get(id);if(!entry)throw Error('角�
 function configureArenaPresentation(){
  try{
  const win=$('arena').contentWindow,doc=win.document;
- const style=doc.createElement('style');style.id='gra-studio-presentation';style.textContent='#arenaIDSlot,#arenaDisplaySettings,#arenaLeftDock #arenaLanguage{display:none!important}#app .graveyard-camera canvas.graveyard-game-canvas{pointer-events:auto!important;touch-action:none!important}';doc.head.append(style);
+ const style=doc.getElementById('gra-studio-presentation')||doc.createElement('style');style.id='gra-studio-presentation';style.textContent='#arenaIDSlot,#arenaDisplaySettings,#arenaLeftDock #arenaLanguage{display:none!important}#app .graveyard-camera canvas.graveyard-game-canvas{pointer-events:auto!important;touch-action:none!important}';doc.head.append(style);
  const select=$('studioLang');
  if(win.ArenaLocale){select.value=win.ArenaLocale.language;select.onchange=()=>win.ArenaLocale.set(select.value)}
  }catch(error){console.warn('Arena presentation:',error)}
@@ -116,7 +116,9 @@ function graAllowNativeMapPan(w,doc,api,canvas){
 }
 function graSetupDeployment(){
  const w=$('arena').contentWindow,d=w.document;
- if(!w.DBDeployment||!w.DBDeployment.canvas){return false}
+ if(w.ArenaMap?.error){status('地图加载失败：'+w.ArenaMap.error);return true;}
+ if(!w.ArenaCampaignLoaded||!w.DBDeployment||!w.DBDeployment.canvas){return false}
+ configureArenaPresentation();
  const api=w.DBDeployment,canvas=api.canvas;
  if(canvas.dataset.graBound)return true;
  canvas.dataset.graBound='1';
@@ -178,8 +180,9 @@ function graSetupDeployment(){
  return true;
 }
 function graWaitForDeployment(){
- let attempts=0;
- const timer=setInterval(()=>{if(graSetupDeployment()||++attempts>50)clearInterval(timer)},300);
+ const frame=$('arena'),win=frame.contentWindow;
+ if(!win.ArenaCampaignReady){status('地图启动入口不可用，请刷新页面。');return;}
+ win.ArenaCampaignReady.then(()=>{if(frame.contentWindow===win)graSetupDeployment();}).catch(error=>status('地图加载失败：'+error.message));
 }
 $('arena').addEventListener('load',graWaitForDeployment);
 async function loadPublishedCards(){
@@ -221,6 +224,7 @@ connect().then(async d=>{db=d;await render();await loadPublishedCards()}).catch(
    localStorage.setItem('gra-selected-campaign',campaign.id);
    const current=new URL(frame.getAttribute('src'),location.href);
    const next=new URL(campaign.engine,location.href);
+   if(campaign.id!==manifest.defaultCampaign)next.searchParams.set('campaign',campaign.id);
    if(current.pathname!==next.pathname || current.search!==next.search)frame.src=next.href;
    if(typeof status==='function')status('当前战役：'+campaign.title);
   }

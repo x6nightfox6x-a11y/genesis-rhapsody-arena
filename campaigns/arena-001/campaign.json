@@ -3,11 +3,8 @@
   "version": 1,
   "id": "arena-001",
   "name": "Arena · Campaign 001",
-  "status": "legacy-embedded",
+  "status": "external-map",
   "engine": "../../Arena game.html",
-  "map": {
-    "source": "legacy-engine",
-    "note": "现有地图仍内嵌在 Arena game.html；后续可按需提取到单独文件。"
-  },
-  "notes": "此清单是拆分架构第一阶段，不修改原战斗逻辑或地图数据。"
+  "map": "map.json",
+  "notes": "地图几何、背景与默认布阵由 map.json 提供；后台与游戏共用同一加载器。"
 }

@@ -34,6 +34,9 @@ npm run inspect -- --id --find "function animate"
 | 后台、角色库、iframe、战役选择 | `studio.html` |
 | 角色动作制作 | `Downbeat_ID_Card_Studio.html` |
 | 战役列表 | `campaigns/manifest.json` 与各战役描述 |
+| 地图尺寸、障碍、默认队伍、背景 | `campaigns/<campaign>/map.json` 和 `background.png` |
+| 地图加载、路径解析、错误处理 | `campaigns/map-runtime.js` |
+| 地图数据格式与验证 | `campaigns/map-schema.js`（Node 与浏览器共用） |
 | 启动、检查、发布文件清单 | `tools/` |
 
 ## 本地测试
@@ -50,4 +53,6 @@ npm run inspect -- --id --find "function animate"
 
 `tools/site.mjs` 是预览与构建的共用文件清单。新增资源目录时更新它；PR 与 Pages 使用同一构建命令。不要提交 `_site/`、`node_modules/`、截图或个人存档。
 
-`campaigns/` 描述的是内嵌战役，增加一项清单不会自动实现地图加载。提取内联脚本、图片或地图之前，必须同时验证“导出完整游戏 HTML”后独立打开仍可使用。后续拆分要先约定源文件与生成文件，避免两套实现漂移。
+`campaigns/` 现已提供独立地图。入口由 manifest 指向 campaign.json，再由描述文件的 map 字段指向 map.json。共享加载器读取几何、默认布阵和背景后才启动引擎；后台等待 ArenaCampaignReady，不再依赖固定轮询次数。详见 campaigns/README.md。
+
+浏览器测试还覆盖：只修改地图 JSON 即改变游戏几何与碰撞、重开保留所选地图、切换战役读取对应描述文件、地图缺失时显示错误，以及完整 HTML 在断网时启动并再次导出。提取更多脚本或图片时继续验证离线导出，避免两套实现漂移。

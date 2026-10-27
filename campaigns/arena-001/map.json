@@ -1,0 +1,246 @@
+{
+  "format": "gra-map",
+  "version": 1,
+  "id": "arena-cathedral",
+  "name": "教堂 Arena",
+  "background": "background.png",
+  "arena": {
+    "width": 17.74,
+    "height": 35.48,
+    "artMap": "arena-cathedral",
+    "obstacles": [
+      {
+        "id": "altar",
+        "x": 5.7,
+        "y": 0,
+        "w": 6.4,
+        "h": 5.2
+      },
+      {
+        "id": "west-edge",
+        "x": 0,
+        "y": 0,
+        "w": 0.48,
+        "h": 35.48
+      },
+      {
+        "id": "east-edge",
+        "x": 17.26,
+        "y": 0,
+        "w": 0.48,
+        "h": 35.48
+      },
+      {
+        "id": "west-pew-0",
+        "x": 4,
+        "y": 12.4,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "east-pew-0",
+        "x": 10.85,
+        "y": 12.4,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "west-pew-1",
+        "x": 4,
+        "y": 15,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "east-pew-1",
+        "x": 10.85,
+        "y": 15,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "west-pew-2",
+        "x": 4,
+        "y": 21.8,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "east-pew-2",
+        "x": 10.85,
+        "y": 21.8,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "west-pew-3",
+        "x": 4,
+        "y": 24.6,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "east-pew-3",
+        "x": 10.85,
+        "y": 24.6,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "west-pew-4",
+        "x": 4,
+        "y": 28.5,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "east-pew-4",
+        "x": 10.85,
+        "y": 28.5,
+        "w": 2.9,
+        "h": 1.6
+      },
+      {
+        "id": "west-pillar-0",
+        "x": 3.05,
+        "y": 10.8,
+        "w": 1.1,
+        "h": 1.1
+      },
+      {
+        "id": "east-pillar-0",
+        "x": 13.35,
+        "y": 10.8,
+        "w": 1.1,
+        "h": 1.1
+      },
+      {
+        "id": "west-pillar-1",
+        "x": 3.05,
+        "y": 20.9,
+        "w": 1.1,
+        "h": 1.1
+      },
+      {
+        "id": "east-pillar-1",
+        "x": 13.35,
+        "y": 20.9,
+        "w": 1.1,
+        "h": 1.1
+      },
+      {
+        "id": "west-pillar-2",
+        "x": 3.05,
+        "y": 26.3,
+        "w": 1.1,
+        "h": 1.1
+      },
+      {
+        "id": "east-pillar-2",
+        "x": 13.35,
+        "y": 26.3,
+        "w": 1.1,
+        "h": 1.1
+      }
+    ]
+  },
+  "initialCampaign": {
+    "format": "downbeat-map-campaign",
+    "version": 1,
+    "name": "教堂 Arena",
+    "map": "arena-cathedral",
+    "cards": [],
+    "units": [
+      {
+        "id": "placed-1792624531862",
+        "type": "leon",
+        "team": "ally",
+        "name": "空白模特",
+        "skinId": null,
+        "x": 8.87,
+        "y": 28
+      },
+      {
+        "id": "placed-1792624531864",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 8.87,
+        "y": 23
+      },
+      {
+        "id": "placed-1792624531865",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 8.87,
+        "y": 18
+      },
+      {
+        "id": "placed-1792624531866",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 8.87,
+        "y": 13
+      },
+      {
+        "id": "placed-1792624531867",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 2,
+        "y": 17
+      },
+      {
+        "id": "placed-1792624531868",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 15.7,
+        "y": 17
+      },
+      {
+        "id": "placed-1792624531869",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 2,
+        "y": 23
+      },
+      {
+        "id": "placed-1792624531870",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 15.7,
+        "y": 23
+      },
+      {
+        "id": "placed-1792624531871",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 7.7,
+        "y": 8.5
+      },
+      {
+        "id": "placed-1792624531872",
+        "type": "grunt",
+        "team": "enemy",
+        "name": "白面神官",
+        "skinId": null,
+        "x": 10,
+        "y": 8.5
+      }
+    ]
+  }
+}

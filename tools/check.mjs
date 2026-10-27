@@ -4,13 +4,16 @@ import vm from 'node:vm';
 import { root, pages, folders, sitePath } from './site.mjs';
 export async function checkSite() {
   let scripts = 0, jsons = 0;
+  const schemaScope = {};
+  new vm.Script(await readFile(sitePath('campaigns/map-schema.js'), 'utf8'), { filename: 'campaigns/map-schema.js' }).runInNewContext(schemaScope);
   for (const file of pages) {
     const html = await readFile(sitePath(file), 'utf8');
     if (!html.trim()) throw Error(`Empty page: ${file}`);
     let index = 0;
     for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
       index++;
-      if (/\bsrc\s*=/.test(match[1])) continue;
+      const source = match[1].match(/\bsrc\s*=\s*['"]([^'"]+)['"]/);
+      if (source) { new vm.Script(await readFile(sitePath(source[1]), 'utf8'), { filename: source[1] }); scripts++; continue; }
       if (/application\/json/.test(match[1])) { JSON.parse(match[2]); continue; }
       new vm.Script(match[2], { filename: `${file}:script-${index}`, lineOffset: html.slice(0, match.index).split('\n').length - 1 });
       scripts++;
@@ -42,6 +45,15 @@ export async function checkSite() {
     if (data?.format !== 'gra-campaign' || data.version !== 1 || data.id !== campaign.id) throw Error(`Invalid descriptor: ${campaign.data}`);
     const descriptorEngine = path.resolve(path.dirname(sitePath(campaign.data)), data.engine);
     if (descriptorEngine !== sitePath(campaign.engine)) throw Error(`Campaign engines disagree: ${campaign.id}`);
+    if (typeof data.map !== 'string') throw Error(`Missing independent map path: ${campaign.id}`);
+    const mapPath = path.relative(root, path.resolve(path.dirname(sitePath(campaign.data)), data.map)).split(path.sep).join('/');
+    sitePath(mapPath);
+    const map = documents.get(mapPath);
+    schemaScope.ArenaMapSchema.validate(map);
+    if (map.background !== null) {
+      const background = path.relative(root, path.resolve(path.dirname(sitePath(mapPath)), map.background));
+      if (!(await stat(sitePath(background.split(path.sep).join('/')))).isFile()) throw Error(`Missing map background: ${background}`);
+    }
   }
   if (!ids.has(manifest.defaultCampaign)) throw Error('Default campaign does not exist');
   for (const [name, card] of documents) if (name.startsWith('角色卡/')) {
@@ -49,6 +61,6 @@ export async function checkSite() {
     const actions = new Set((card.actions || []).map(action => action.id));
     for (const move of card.moves || []) if (!actions.has(move.actionId)) throw Error(`Missing action ${move.actionId}: ${name}`);
   }
-  console.log(`PASS: ${pages.length} pages, ${scripts} inline scripts, ${jsons} JSON files, links and all campaigns.`);
+  console.log(`PASS: ${pages.length} pages, ${scripts} scripts, ${jsons} JSON files, links and all campaigns.`);
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === path.join(root, 'tools', 'check.mjs')) checkSite().catch(error => { console.error(error.message); process.exitCode = 1; });
