@@ -4,7 +4,7 @@ body.testing header{display:none}#endTest{display:none}body.testing #endTest{dis
 'use strict';const $=id=>document.getElementById(id), dbName='gra-unified-studio',store='cards';let db;
 function status(t){$('status').textContent=t}function connect(){return new Promise((res,rej)=>{let q=indexedDB.open(dbName,1);q.onupgradeneeded=()=>{q.result.createObjectStore(store,{keyPath:'id'})};q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
 function tx(mode){return db.transaction(store,mode).objectStore(store)}
-function save(id,card){return new Promise((res,rej)=>{let r=tx('readwrite').put({id,card,updated:Date.now()});r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+async function save(id,card,metadata={}){const previous=await get(id);return new Promise((res,rej)=>{const record={...previous,id,card,updated:Date.now(),dirty:true,...metadata};let r=tx('readwrite').put(record);r.onsuccess=()=>res(record);r.onerror=()=>rej(r.error)});}
 function get(id){return new Promise((res,rej)=>{let r=tx('readonly').get(id);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 function all(){return new Promise((res,rej)=>{let r=tx('readonly').getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 function tab(which){document.body.classList.toggle('editor-mode',which==='editor');if(which==='arena'){setLibrary(false)}$('editor').contentWindow.DBSetPreviewActive?.(which==='editor');for(let id of ['arena','editor']){$(id).classList.toggle('active',id===which);$(id+'Tab').classList.toggle('active',id===which)}}
@@ -44,6 +44,7 @@ function refreshLibrary(){
  const actions=document.createElement('div');actions.className='card-actions';
  const use=document.createElement('button');use.textContent='⚔ 上场';use.onclick=()=>apply(entry.id);actions.append(use);
  const edit=document.createElement('button');edit.textContent='✎ 编辑';edit.onclick=()=>editCard(entry.id);actions.append(edit);
+ const publish=document.createElement('button');publish.textContent='↑ 发布';publish.title='发布此角色到 GitHub';publish.dataset.publishCharacter=entry.id;actions.append(publish);
  node.draggable=true;node.title='拖到地图放置角色';node.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',entry.id);e.dataTransfer.effectAllowed='copy';window.graDraggingId=entry.id});node.append(actions);host.append(node);preview(canvas,entry.card);
  }
 }
@@ -76,6 +77,7 @@ async function saveCurrent(play){
  await save(id,card);currentEditingId=id;await render();
  status('✓ 已保存 '+(card.name||id)+' 到 GRA 本地角色库');
  if(play)await apply(id);
+ return await get(id);
  }catch(e){console.error(e);status('保存失败：'+e.message)}
 }
 $('saveCard').onclick=()=>saveCurrent(false);
@@ -186,23 +188,39 @@ function graWaitForDeployment(){
  win.ArenaCampaignReady.then(()=>{if(frame.contentWindow===win)graSetupDeployment();}).catch(error=>status('地图加载失败：'+error.message));
 }
 $('arena').addEventListener('load',graWaitForDeployment);
+let publishedSources=new Map();
 async function loadPublishedCards(){
-const filenames=['Jay.downbeat.json','LEON.downbeat.json','白面神官.downbeat.json'];
-let added=0,failed=0;
-for(const filename of filenames){
- try{
-  const res=await fetch('角色卡/'+encodeURIComponent(filename),{cache:'no-cache'});
-  if(!res.ok)throw Error('HTTP '+res.status);
-  const card=await res.json();
-  if(card.format!=='downbeat-character')throw Error('不是角色 ID 格式');
-  const id=String(card.name||filename.replace('.downbeat.json',''));
-  if(!(await get(id))){await save(id,card);added++}
- }catch(e){console.warn('角色卡载入失败',filename,e);failed++}
+ const {loadPublishedLibrary}=await import('./studio/character-library.js');
+ const library=await loadPublishedLibrary();publishedSources=new Map(library.characters.map(entry=>[entry.id,entry]));
+ let added=0,failed=0;
+ for(const entry of library.characters){
+  try{
+   const previous=await get(entry.id);
+   if(previous&&(previous.dirty!==false||previous.sourceSHA===entry.sha))continue;
+   const response=await fetch('角色卡/'+encodeURIComponent(entry.file),{cache:'no-cache'});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const card=await response.json();if(card.format!=='downbeat-character')throw Error('角色格式无效');
+   await save(entry.id,card,{dirty:false,sourceSHA:entry.sha,remoteFile:entry.file});added++;
+  }catch{failed++;}
+ }
+ await render();status('GitHub 角色库：'+library.characters.length+' 张，载入 '+added+' 张'+(failed?'，失败 '+failed+' 张':''));
 }
-await render();
-status('已加载 GitHub 角色库：'+filenames.length+' 张，新增 '+added+' 张'+(failed?'，失败 '+failed+' 张':''));
-}
-connect().then(async d=>{db=d;await render();await loadPublishedCards()}).catch(e=>status('角色库不可用：'+e.message));
+window.GRAStudio={
+ async getDraft(id){
+  const entry=id?await get(id):await saveCurrent(false);if(!entry)throw Error('角色草稿不可用');
+  const runtime=$('arena').contentWindow.ArenaRuntime;
+  if(runtime)await runtime.prepare(entry.card);else $('editor').contentWindow.DBCard.validate(entry.card);
+  return {id:entry.id,card:entry.card,sourceSHA:entry.sourceSHA||publishedSources.get(entry.id)?.sha};
+ },
+ async markPublished(published,draft){
+  const current=await get(draft.id);if(!current)return;
+  const unchanged=JSON.stringify(current.card)===JSON.stringify(draft.card);
+  await save(draft.id,current.card,{dirty:!unchanged,sourceSHA:published.sha,remoteFile:published.file});
+  publishedSources.set(draft.id,published);await render();
+ }
+};
+window.GRAStudio.ready=connect().then(async d=>{db=d;await render();try{await loadPublishedCards();}catch{status('GitHub 角色清单暂不可用，本地草稿仍保留。');}}).catch(error=>{status('角色库不可用：'+error.message);throw error;});
+window.GRAStudio.ready.catch(()=>{});
 
 /* Campaign selection: original Arena game is unchanged. */
 (async function graLoadCampaigns(){
@@ -233,4 +251,4 @@ connect().then(async d=>{db=d;await render();await loadPublishedCards()}).catch(
   choose();
  }catch(error){console.warn('Campaign manifest unavailable: legacy Arena remains active',error);pick.title='战役清单不可用，使用原版 Arena';}
 })();
-</script></body></html>
+</script><script type="module" src="studio/studio-publish.js"></script></body></html>

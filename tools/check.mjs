@@ -1,7 +1,9 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { execFileSync } from 'node:child_process';
 import { root, pages, folders, sitePath } from './site.mjs';
+import { validateLibrary } from '../studio/character-library.js';
 export async function checkSite() {
   let scripts = 0, jsons = 0;
   const schemaScope = {};
@@ -13,7 +15,11 @@ export async function checkSite() {
     for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
       index++;
       const source = match[1].match(/\bsrc\s*=\s*['"]([^'"]+)['"]/);
-      if (source) { new vm.Script(await readFile(sitePath(source[1]), 'utf8'), { filename: source[1] }); scripts++; continue; }
+      if (source) {
+        if (/type\s*=\s*['"]module['"]/.test(match[1])) execFileSync(process.execPath,['--check',sitePath(source[1])],{stdio:'pipe'});
+        else new vm.Script(await readFile(sitePath(source[1]), 'utf8'), { filename: source[1] });
+        scripts++;continue;
+      }
       if (/application\/json/.test(match[1])) { JSON.parse(match[2]); continue; }
       new vm.Script(match[2], { filename: `${file}:script-${index}`, lineOffset: html.slice(0, match.index).split('\n').length - 1 });
       scripts++;
@@ -31,6 +37,7 @@ export async function checkSite() {
       const name = folder + '/' + entry.name;
       if (entry.isDirectory()) await scan(name);
       else if (entry.name.endsWith('.json')) { documents.set(name, JSON.parse(await readFile(sitePath(name), 'utf8'))); jsons++; }
+      else if(name.startsWith('studio/')&&entry.name.endsWith('.js'))execFileSync(process.execPath,['--check',sitePath(name)],{stdio:'pipe'});
     }
   }
   for (const folder of folders) await scan(folder);
@@ -56,7 +63,11 @@ export async function checkSite() {
     }
   }
   if (!ids.has(manifest.defaultCampaign)) throw Error('Default campaign does not exist');
-  for (const [name, card] of documents) if (name.startsWith('角色卡/')) {
+  const library=validateLibrary(documents.get('角色卡/library.json'));
+  const indexedFiles=new Set(library.characters.map(entry=>entry.file));
+  for(const entry of library.characters)if(!documents.has('角色卡/'+entry.file))throw Error('Missing published character: '+entry.file);
+  for (const [name, card] of documents) if (name.startsWith('角色卡/')&&name.endsWith('.downbeat.json')) {
+    if(!indexedFiles.has(name.slice('角色卡/'.length)))throw Error('Character missing from library index: '+name);
     if (card.format !== 'downbeat-character' || card.version !== 1 || !card.name) throw Error(`Invalid character: ${name}`);
     const actions = new Set((card.actions || []).map(action => action.id));
     for (const move of card.moves || []) if (!actions.has(move.actionId)) throw Error(`Missing action ${move.actionId}: ${name}`);

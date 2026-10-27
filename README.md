@@ -16,6 +16,8 @@
 
 修改或增加地图参见 [地图开发说明](campaigns/README.md)。直接双击开发版引擎需要的外部 JSON 可能被浏览器拦截，请使用本地预览；游戏中的“导出完整游戏 HTML”会生成不依赖外部文件的离线版本。
 
+角色可以在 Studio 或在线角色编辑器中点击“发布到 GitHub”。首次需要在网页弹窗连接 GitHub，之后当前页面内一键发布。操作方式见 [角色发布说明](docs/PUBLISHING.md)。
+
 ## 给 Codex、GPT 和开发者
 
 先读 [AGENTS.md](AGENTS.md) 与 [开发指南](docs/DEVELOPMENT.md)。不要恢复已删除的旧游戏副本，也不要把 Arena 复制回 `index.html`。
