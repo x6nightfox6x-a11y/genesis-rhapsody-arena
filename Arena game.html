@@ -2644,6 +2644,9 @@ function createGame() {
         (0, canvasRenderer_1.drawBattle)(ctx, rangeState, { ...overlay, debug: debugOn, pick, intents,
             jumpReachPreview, jumpChoiceAffordable });
     };
+    // Normal play redraws every frame. A paused non-editor view redraws newly exposed pixels on camera changes.
+    // Editing draws the complete map once, retaining its transform-only pan path.
+    window.DBArenaInvalidate = () => {if(paused&&!deploySnapshot)redraw();};
     /** Hit stops that wait for the moment a pushed unit reaches what it crashes into. */
     let holds = [];
     /** Banners that wait for a moment in the playback (virtual time). */
@@ -2892,8 +2895,10 @@ function createGame() {
         hud?.setMode(mode);
         hud?.setMoveSelection(mode,activeMoveId);
         hud?.setMessage(HINTS()[mode]);
+        input?.refreshMouseCursor();
     };
     const refreshHud = () => {
+        input?.refreshMouseCursor();
         hud?.setAvailable(available());
         hud?.setMode(overlay.mode);
         hud?.setGrabStatus(!!state.grabbed && !!selected() && state.grabbed.actorId === selected().id, !!state.grabbed);
@@ -5859,6 +5864,14 @@ class InputRouter {
     swipeMode = false;
     swipe = null;
     mousePreviewFrame = 0;
+    clearMousePreview = () => {
+        cancelAnimationFrame(this.mousePreviewFrame);this.mousePreviewFrame=0;this.pendingMousePreview=null;
+    };
+    refreshMouseCursor = () => {
+        if(this.canvas.dataset.cameraPanning==='1'||this.gripDragId!==null)return;
+        this.canvas.style.cursor=this.enabled&&(this.handlers.showAimCursor?.()??false)?'crosshair':'';
+    };
+    cameraPanStart = () => {this.clearMousePreview();this.handlers.onCursor(null);};
     pendingMousePreview = null;
     lastMousePreviewAt = -Infinity;
     flushMousePreview = (now) => {
@@ -5871,7 +5884,7 @@ class InputRouter {
         const point = this.pendingMousePreview;
         this.pendingMousePreview = null;
         this.lastMousePreviewAt = now;
-        this.handlers.onCursor(this.handlers.showAimCursor?.() ? point : null);
+        this.handlers.onCursor(null); // Mouse aiming uses the native compositor cursor; touch retains the canvas cursor.
         this.handlers.onMove(point);
     };
     constructor(canvas, handlers) {
@@ -5880,6 +5893,8 @@ class InputRouter {
     }
     attach() {
         this.canvas.style.touchAction = 'none';
+        this.canvas.addEventListener('arena-camera-pan-start',this.cameraPanStart);
+        this.canvas.addEventListener('arena-camera-pan-end',this.refreshMouseCursor);
         this.canvas.addEventListener('pointermove', this.move);
         this.canvas.addEventListener('pointerdown', this.down);
         this.canvas.addEventListener('pointerup', this.up);
@@ -5892,6 +5907,8 @@ class InputRouter {
         cancelAnimationFrame(this.mousePreviewFrame);
         this.mousePreviewFrame = 0;
         this.pendingMousePreview = null;
+        this.canvas.removeEventListener('arena-camera-pan-start',this.cameraPanStart);
+        this.canvas.removeEventListener('arena-camera-pan-end',this.refreshMouseCursor);
         this.canvas.removeEventListener('pointermove', this.move);
         this.canvas.removeEventListener('pointerdown', this.down);
         this.canvas.removeEventListener('pointerup', this.up);
@@ -6007,7 +6024,7 @@ class InputRouter {
         }
         if (event.pointerType !== 'touch') {
             const aiming = this.handlers.showAimCursor?.() ?? false;
-            this.canvas.style.cursor = aiming ? 'none' : '';
+            this.canvas.style.cursor = aiming ? 'crosshair' : '';
             this.pendingMousePreview = point;
             if (!this.mousePreviewFrame)
                 this.mousePreviewFrame = requestAnimationFrame(this.flushMousePreview);
@@ -6124,6 +6141,7 @@ function createGraveyardCamera(container) {
     let zoom = 1;
     let offsetX = 0;
     let offsetY = 0;
+    let paintedWidth=NaN,paintedHeight=NaN;
     let dragging = null;
     let value = null;
     const listeners = [];
@@ -6136,10 +6154,14 @@ function createGraveyardCamera(container) {
     const paint = () => {
         if(!canvas||!frame)return;
         const scale=Math.max(frame.clientWidth/canvas.width,frame.clientHeight/canvas.height);
-        canvas.style.setProperty('width',canvas.width*scale+'px','important');
-        canvas.style.setProperty('height',canvas.height*scale+'px','important');
+        const width=canvas.width*scale,height=canvas.height*scale;
+        if(width!==paintedWidth||height!==paintedHeight){
+            paintedWidth=width;paintedHeight=height;
+            canvas.style.setProperty('width',width+'px','important');canvas.style.setProperty('height',height+'px','important');
+        }
         clamp();canvas.style.transform=`translate3d(${offsetX}px, ${offsetY}px, 0) scale(${zoom})`;
-        if(value)value.textContent=Math.round(zoom*100)+'%';
+        window.DBArenaInvalidate?.();
+        const label=Math.round(zoom*100)+'%';if(value&&value.textContent!==label)value.textContent=label;
         const zoomInput=document.getElementById('arenaZoomPercent');if(zoomInput&&document.activeElement!==zoomInput)zoomInput.value=String(Math.round(zoom*100));
     };
     const setZoom = (next, x, y) => {
@@ -6167,7 +6189,7 @@ function createGraveyardCamera(container) {
         cancelAnimationFrame(cinemaRaf);
     };
     const cinemaShot = (points, options={}) => {
-        if(!cinemaEnabled || !frame || !canvas || !points?.length || tracking) return;
+        if(dragging || !cinemaEnabled || !frame || !canvas || !points?.length || tracking) return;
         cancelCinema();
         const generation=cinemaGeneration, saved={zoom,x:offsetX,y:offsetY};
         const valid=points.filter(p=>p && Number.isFinite(p.x) && Number.isFinite(p.y));
@@ -6205,7 +6227,7 @@ function createGraveyardCamera(container) {
     // Keep the actor close to screen center with a soft dead zone and frame-rate independent easing.
     let walkingCamera = null;
     const beginWalk = (start, destination, force=false) => {
-        if ((!cinemaEnabled&&!force) || !frame || !canvas || tracking) return;
+        if (dragging || (!cinemaEnabled&&!force) || !frame || !canvas || tracking) return;
         cancelCinema();
         walkingCamera = { force, last: performance.now(), lastPosition: start, destination,
             holdUntil: 0, targetX: offsetX, targetY: offsetY };
@@ -6267,6 +6289,7 @@ function createGraveyardCamera(container) {
         }
     };
     const trackLeonFlight = (flight, durationMs, windupMs = 0, impacts = []) => {
+        if(dragging)return;
         if (!frame || !canvas || !flight || !Array.isArray(flight.points) || flight.points.length < 2) return;
         stopTracking();
         cancelCinema();
@@ -6361,6 +6384,7 @@ function createGraveyardCamera(container) {
         cancelCinema();
         walkingCamera=null;
         dragging = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+        canvas.dataset.cameraPanning='1';canvas.dispatchEvent(new Event('arena-camera-pan-start'));
         canvas.setPointerCapture(e.pointerId);
         canvas.style.cursor = 'grabbing';
     };
@@ -6381,8 +6405,11 @@ function createGraveyardCamera(container) {
         e.preventDefault();
         e.stopImmediatePropagation();
         dragging = null;
-        if (canvas)
-            canvas.style.cursor = '';
+        if(canvas){
+            delete canvas.dataset.cameraPanning;
+            if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
+            canvas.style.cursor='';canvas.dispatchEvent(new Event('arena-camera-pan-end'));
+        }
     };
     const resetView = () => { stopTracking(); cancelCinema(); walkingCamera=null; zoom = 1; offsetX = 0; offsetY = 0; paint(); const map=window.__DBMiniMapBattle; const unit=map?.units?.find(u=>u.id===map.selectedId)||map?.units?.find(u=>u.team==='ally'); const px=unit?10+unit.x*100:canvas.width*.5,py=unit?10+unit.y*100:canvas.height*.79;offsetX=frame.clientWidth*.5-px/canvas.width*canvas.clientWidth;offsetY=frame.clientHeight*.5-py/canvas.height*canvas.clientHeight;paint(); };
     const attach = () => {
@@ -6405,6 +6432,7 @@ function createGraveyardCamera(container) {
         frame.setAttribute('aria-label', 'Arena 教堂战斗地图，滚轮缩放，中键或 Shift 拖动平移');
         container.insertBefore(frame, canvas);
         frame.appendChild(canvas);
+        paintedWidth=NaN;paintedHeight=NaN;
         canvas.classList.add('graveyard-game-canvas');
         const toolbar = document.createElement('div');
         toolbar.className = 'graveyard-toolbar';
@@ -6516,6 +6544,8 @@ function createGraveyardCamera(container) {
         canvas.addEventListener('pointermove', onPointerMove, true);
         canvas.addEventListener('pointerup', onPointerUp, true);
         canvas.addEventListener('pointercancel', onPointerUp, true);
+        canvas.addEventListener('lostpointercapture',onPointerUp,true);
+        listeners.push(()=>canvas?.removeEventListener('lostpointercapture',onPointerUp,true));
         canvas.addEventListener('auxclick', auxclick);
         window.addEventListener('resize', onResize);
         listeners.push(() => frame?.removeEventListener('wheel', wheel), () => canvas?.removeEventListener('pointerdown', onPointerDown, true), () => canvas?.removeEventListener('pointermove', onPointerMove, true), () => canvas?.removeEventListener('pointerup', onPointerUp, true), () => canvas?.removeEventListener('pointercancel', onPointerUp, true), () => canvas?.removeEventListener('auxclick', auxclick), () => window.removeEventListener('resize', onResize));
@@ -8282,6 +8312,18 @@ function drawPopups(ctx, popups, now) {
 function drawBattle(ctx, state, overlay, now = clock.now()) {
     const zoom = clock.slowZoom();
     ctx.save();
+    if(!window.DBDeployment?.active){
+        const rect=ctx.canvas.getBoundingClientRect(),view=ctx.canvas.parentElement?.getBoundingClientRect();
+        if(view&&rect.width>0&&rect.height>0){
+            const sx=ctx.canvas.width/rect.width,sy=ctx.canvas.height/rect.height;
+            // Keep a small raster margin for immediate compositor pans between game frames.
+            const overscan=96;
+            const left=Math.max(rect.left,view.left-overscan,-overscan),top=Math.max(rect.top,view.top-overscan,-overscan);
+            const right=Math.min(rect.right,view.right+overscan,innerWidth+overscan),bottom=Math.min(rect.bottom,view.bottom+overscan,innerHeight+overscan);
+            ctx.beginPath();ctx.rect((left-rect.left)*sx,(top-rect.top)*sy,Math.max(0,right-left)*sx,Math.max(0,bottom-top)*sy);ctx.clip();
+        }
+    }
+    ctx.save();
     if (zoom > 0 && overlay.focus) {
         const f = toCanvas(overlay.focus);
         const k = 1 + clock.getZoomMax() * zoom;
@@ -8321,6 +8363,7 @@ function drawBattle(ctx, state, overlay, now = clock.now()) {
             text(ctx, 'release to cancel', { x, y }, COLORS.impact);
         }
     }
+    ctx.restore();
 }
 
 },
@@ -11440,7 +11483,7 @@ function createHud(container, handlers) {
     syncCharacterDock();
     return {
         setMessage(text) {
-            message.textContent = text;
+            if(message.textContent!==text)message.textContent = text;
         },
         setLog(text) {
             log.textContent = text;
