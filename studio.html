@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GRA Studio</title><style>
 *{box-sizing:border-box}body{margin:0;background:#111017;color:#f3e9d6;font:14px system-ui,sans-serif}header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:#211b27;border-bottom:1px solid #655263}h1{font-size:18px;margin:0;color:#e5c18a}button{border:1px solid #766379;background:#302538;color:#fff0d7;padding:9px 14px;border-radius:7px;cursor:pointer}button:hover{background:#52405b}.primary{background:#695035}.active{background:#735843}#status{color:#d3c18e;font-size:12px;margin-left:auto}#studioLang{background:#302538;color:#fff0d7;border:1px solid #766379;border-radius:6px;padding:7px}.panels{display:flex;height:calc(100dvh - 65px);position:relative}.panels #side{display:none}.panels.library-open #side{display:block;position:absolute;z-index:100;top:0;bottom:0;left:0;box-shadow:10px 0 35px #0009}#side{width:220px;max-width:88vw;flex-shrink:0;background:#191820;border-right:1px solid #554755;padding:16px;overflow:auto}h2{font-size:15px;color:#e5c18a}small{color:#ab9eac}.card-grid{display:flex;flex-direction:column;gap:6px;margin-top:10px}.library-controls{display:flex;flex-direction:column;gap:6px;margin:10px 0}.library-controls input,.library-controls select{min-width:0;background:#251e2c;color:#fff2da;border:1px solid #67556d;border-radius:6px;padding:9px;flex:1}.card-preview{width:56px;height:56px;flex:0 0 56px;display:grid;place-content:center;background:radial-gradient(circle,#342c39,#17141e);border-radius:7px;margin-bottom:9px;overflow:hidden}.card-preview canvas{max-width:52px;max-height:52px;image-rendering:pixelated}.card-actions{display:flex;gap:3px;grid-column:2;flex-wrap:nowrap}.card-actions button{flex:1;white-space:nowrap;font-size:11px;padding:5px 3px;min-width:0}.library-footer{display:flex;justify-content:space-between;align-items:center;gap:4px;margin-top:12px}.library-footer button{font-size:11px;padding:6px 4px}.entry{display:grid;grid-template-columns:56px minmax(0,1fr);column-gap:8px;align-items:center;border:1px solid #4b4453;border-radius:8px;margin:9px 0;padding:10px;overflow-wrap:anywhere}.entry strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0}.entry button{font-size:12px;padding:7px;margin:2px}.main{flex:1;min-width:0}#saveCard,#saveAndPlay{display:none}body.editor-mode #saveCard,body.editor-mode #saveAndPlay{display:inline-block}iframe{width:100%;height:100%;border:0;background:#100e14;display:none}iframe.active{display:block}#empty{color:#a99bb2} @media(max-width:700px){header{gap:5px}#status{width:100%;margin:0}.panels{height:calc(100dvh - 103px)}#side{width:190px;padding:8px}button{padding:7px}h1{font-size:14px}}
-body.testing header{display:none}#endTest{display:none}body.testing #endTest{display:block;position:fixed;z-index:999999;top:9px;left:9px;background:#211b27cc}body.testing .panels{height:100dvh!important}body.testing #side{display:none!important}body.testing .main{width:100vw}body.testing #arena{display:block!important}body.testing #editor{display:none!important}body.testing #saveCard,body.testing #saveAndPlay{display:none!important}</style></head><body><header><h1>✦ GRA STUDIO</h1><button id="testGame" class="primary">▶ 游戏测试</button><button id="arenaTab" class="active">⚔ Arena</button><button id="editorTab">♜ ID Studio</button><button id="libraryToggle" aria-expanded="false">☰ 角色库</button><button id="saveCard" class="primary">💾 保存角色</button><button id="saveAndPlay">▶ 保存并测试</button><span id="status">统一角色库载入中…</span><select id="studioLang" aria-label="界面语言" title="切换中英文"><option value="zh">中文</option><option value="en">English</option></select></header><button id="endTest" aria-label="返回开发后台">← 返回后台</button><div class="panels" id="panels"><aside id="side"><h2>GRA 角色库</h2><small>选择角色编辑。保存后可立即进入 Arena 测试。</small><div class="library-controls"><input id="cardSearch" placeholder="搜索角色名 / ID…" aria-label="搜索角色"><select id="cardSort" aria-label="角色排序"><option value="recent">最近修改</option><option value="name">名称 A-Z</option></select></div><small id="cardCount"></small><div id="cards" class="card-grid"></div><p id="empty">暂无匹配的角色</p><div class="library-footer"><button id="prevPage">← 上一页</button><small id="pageInfo"></small><button id="nextPage">下一页 →</button></div></aside><div class="main"><iframe id="arena" title="GRA Arena" src="index.html" class="active"></iframe><iframe id="editor" title="GRA ID Studio" src="Downbeat_ID_Card_Studio.html"></iframe></div></div><script>
+body:not(.editor-mode)>header{position:fixed;inset:0 0 auto;z-index:1000;background:#211b27ed}body:not(.editor-mode) .panels{height:100dvh!important}body:not(.editor-mode) .panels #side{top:65px}body.testing header{display:none}#endTest{display:none}body.testing #endTest{display:block;position:fixed;z-index:999999;top:9px;left:9px;background:#211b27cc}body.testing .panels{height:100dvh!important}body.testing #side{display:none!important}body.testing .main{width:100vw}body.testing #arena{display:block!important}body.testing #editor{display:none!important}body.testing #saveCard,body.testing #saveAndPlay{display:none!important}</style></head><body><header><h1>✦ GRA STUDIO</h1><button id="testGame" class="primary">▶ 继续游戏 · F8</button><button id="arenaTab" class="active">⚔ Arena</button><button id="editorTab">♜ ID Studio</button><button id="libraryToggle" aria-expanded="false">☰ 角色库</button><button id="saveCard" class="primary">💾 保存角色</button><button id="saveAndPlay">▶ 保存并测试</button><span id="status">统一角色库载入中…</span><select id="studioLang" aria-label="界面语言" title="切换中英文"><option value="zh">中文</option><option value="en">English</option></select></header><button id="endTest" aria-label="返回开发后台">← 编辑当前战场 · F8</button><div class="panels" id="panels"><aside id="side"><h2>GRA 角色库</h2><small>选择角色编辑。保存后可立即进入 Arena 测试。</small><div class="library-controls"><input id="cardSearch" placeholder="搜索角色名 / ID…" aria-label="搜索角色"><select id="cardSort" aria-label="角色排序"><option value="recent">最近修改</option><option value="name">名称 A-Z</option></select></div><small id="cardCount"></small><div id="cards" class="card-grid"></div><p id="empty">暂无匹配的角色</p><div class="library-footer"><button id="prevPage">← 上一页</button><small id="pageInfo"></small><button id="nextPage">下一页 →</button></div></aside><div class="main"><iframe id="arena" title="GRA Arena" src="index.html" class="active"></iframe><iframe id="editor" title="GRA ID Studio" src="Downbeat_ID_Card_Studio.html"></iframe></div></div><script>
 'use strict';const $=id=>document.getElementById(id), dbName='gra-unified-studio',store='cards';let db;
 function status(t){$('status').textContent=t}function connect(){return new Promise((res,rej)=>{let q=indexedDB.open(dbName,1);q.onupgradeneeded=()=>{q.result.createObjectStore(store,{keyPath:'id'})};q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
 function tx(mode){return db.transaction(store,mode).objectStore(store)}
@@ -11,7 +11,29 @@ function tab(which){document.body.classList.toggle('editor-mode',which==='editor
 function setLibrary(open){$('panels').classList.toggle('library-open',open);$('libraryToggle').setAttribute('aria-expanded',String(open));$('libraryToggle').textContent=open?'✕ 收起角色库':'☰ 角色库'}
 $('libraryToggle').onclick=()=>setLibrary(!$('panels').classList.contains('library-open'));
 
-$('testGame').onclick=()=>{try{const deployment=$('arena').contentWindow.DBDeployment;if(deployment?.active){const units=deployment.inspect().units;if(!units.some(u=>u.def.team==='ally')||!units.some(u=>u.def.team==='enemy'))throw Error('开始游戏至少需要一名我方角色和一名敌人');deployment.checkpoint();deployment.cancel()}tab('arena');setLibrary(false);document.body.classList.add('testing');status('游戏测试中')}catch(e){status('无法开始测试：'+e.message)}};$('endTest').onclick=()=>{document.body.classList.remove('testing');try{const d=$('arena').contentWindow.DBDeployment;if(d&&!d.active)d.begin();status('已返回部署后台')}catch(e){status('返回后台：'+e.message)}};
+function presentArenaMode(testing){
+ tab('arena');setLibrary(false);document.body.classList.toggle('testing',testing);
+ graHistory.undo=[];graHistory.redo=[];graSelectedUnit=null;
+ $('endTest').textContent='← 编辑当前战场 · F8';
+ status(testing?'游戏测试中 · F8 返回当前战场编辑':'编辑当前战场 · 中键 / Shift 拖动地图 · F8 应用调整并继续');
+}
+function switchArenaMode(testing){
+ try{
+  const w=$('arena').contentWindow;
+  if(!w.ArenaEditor)throw Error('Arena 尚未加载完成');
+  // Only change the visible mode after the runtime accepts the transition.
+  if(testing)w.ArenaEditor.resume();else w.ArenaEditor.enter();
+  $('arena').contentWindow.focus();return true;
+ }catch(e){
+  status('切换失败：'+e.message);
+  if(document.body.classList.contains('testing'))$('endTest').textContent='请完成当前动作后再编辑 · F8';
+  return false;
+ }
+}
+function modeShortcut(e){if(e.code!=='F8'||e.repeat||e.target.closest?.('input,textarea,select,[contenteditable=true]'))return;e.preventDefault();e.stopImmediatePropagation();switchArenaMode(!document.body.classList.contains('testing'));}
+window.addEventListener('keydown',modeShortcut,true);
+$('testGame').onclick=()=>switchArenaMode(true);
+$('endTest').onclick=()=>switchArenaMode(false);
 $('arenaTab').onclick=()=>tab('arena');$('editorTab').onclick=()=>tab('editor');
 let page=0;const pageSize=18;let libraryEntries=[];
 function preview(canvas,card){
@@ -99,29 +121,17 @@ function graRestore(list){const api=$('arena').contentWindow.DBDeployment;graHis
 function graTravel(back){const from=back?graHistory.undo:graHistory.redo,to=back?graHistory.redo:graHistory.undo;const snapshot=from.pop();if(!snapshot)return;const current=graSnapshot();if(current)to.push(current);graRestore(snapshot);graUpdateHistory();status(back?'↶ 已撤销':'↷ 已重做')}
 graUpdateHistory();
 window.addEventListener('keydown',e=>{if(document.body.classList.contains('testing')||!e.ctrlKey||e.altKey||e.metaKey)return;if(e.target.closest?.('input,textarea,[contenteditable=true]'))return;if(e.key.toLowerCase()==='z'){e.preventDefault();graTravel(!e.shiftKey)}else if(e.key.toLowerCase()==='y'){e.preventDefault();graTravel(false)}},true);
-// Deployment's document-capture pointermove/pointerup handler swallows events
-// even when no unit is being dragged. Let the original Arena canvas camera
-// receive middle-button motion. Left-button unit editing stays untouched.
-function graAllowNativeMapPan(w,doc,api,canvas){
- if(w.__graNativeMapPanEnabled)return;
- const nativeStop=w.Event.prototype.stopImmediatePropagation;
- if(typeof nativeStop!=='function')throw Error('浏览器不支持地图事件修复');
- w.Event.prototype.stopImmediatePropagation=function(){
-   const middleMove=this.type==='pointermove'&&((this.buttons&4)!==0);
-   const middleUp=this.type==='pointerup'&&this.button===1;
-   if(api.active&&this.currentTarget===doc&&this.target===canvas&&(middleMove||middleUp))return;
-   return nativeStop.call(this);
- };
- w.__graNativeMapPanEnabled=true;
-}
 function graSetupDeployment(){
  const w=$('arena').contentWindow,d=w.document;
- if(!w.DBDeployment||!w.DBDeployment.canvas){return false}
+ if(!w.DBDeployment||!w.DBDeployment.canvas||!w.ArenaEditor){return false}
  const api=w.DBDeployment,canvas=api.canvas;
  if(canvas.dataset.graBound)return true;
  canvas.dataset.graBound='1';
- try{if(!api.active)api.begin()}catch(e){status('部署模式启动失败：'+e.message);return false}
- try{graAllowNativeMapPan(w,d,api,canvas)}catch(e){status('地图中键修复失败：'+e.message);console.error(e)}
+ try{w.ArenaEditor.enter()}catch(e){status('部署模式启动失败：'+e.message);return false}
+ canvas.dataset.graBound='1';
+ // The embedded editor delegates presentation and shortcuts to its host.
+ w.ArenaEditor.onModeChange=presentArenaMode;
+ w.ArenaEditor.hostToggle=()=>switchArenaMode(!document.body.classList.contains('testing'));
  // Drag cards from the library onto the map. The game frame shares this site's origin.
  d.addEventListener('dragover',e=>{if(!window.graDraggingId)return;e.preventDefault();e.dataTransfer.dropEffect='copy'},true);
  d.addEventListener('drop',async e=>{
@@ -145,7 +155,7 @@ function graSetupDeployment(){
  // Track selected unit by clicking the map, but leave dragging/movement to Arena deployment.
  // Window capture executes before Arena's own document-capture editor handler.
  w.addEventListener('pointerdown',e=>{
-  if(!api.active||document.body.classList.contains('testing')||e.target!==canvas||e.button!==0)return;
+  if(!api.active||document.body.classList.contains('testing')||e.target!==canvas||e.button!==0||e.shiftKey)return;
   try{
    const p=api.point(e),units=api.inspect().units;
    const hit=units.find(u=>Math.hypot(u.pos.x-p.x,u.pos.y-p.y)<u.def.radius+0.25);

@@ -5393,11 +5393,22 @@ function createGame() {
         get active(){return !!deploySnapshot;},
         inspect(){return deployCopy({units:state.units,arena:state.arena});},
         setDefaultRoster(){deploymentCheck(state.units);window.__DBDefaultBattleState=deployCopy({...state,units:state.units.map(u=>({...u,hp:u.def.hp,baseHp:u.def.hp,stunned:false,installedEffects:[]})),turn:{moved:[],acted:[],walked:{}},grabbed:null});return state.units.length;},
-        begin(){if(deploySnapshot)return;if(active||enemyPhase||moving||state.grabbed||throwPrep)throw Error('请等待当前动作结束，并放下抓取的角色后再布阵');deploySnapshot=deployCopy(state);paused=true;cancelAnimationFrame(raf);syncInput();redraw();},
+        begin(){if(deploySnapshot)return;if(dbAirChoice||dbAirCinematic||window.arenaWeaponPending||active||enemyPhase||moving||state.grabbed||throwPrep)throw Error('请等待当前动作结束，并放下抓取的角色后再布阵');deploySnapshot=deployCopy(state);paused=true;cancelAnimationFrame(raf);syncInput();redraw();},
         cancel(){if(!deploySnapshot)return;state=deploySnapshot;deploySnapshot=null;const ready=state.units.some(u=>u.def.team==='ally')&&state.units.some(u=>u.def.team==='enemy');paused=!ready;refreshHud();syncInput();redraw();if(running&&!paused)raf=requestAnimationFrame(frame);},
         // Editor clearing is persistent: closing with Cancel must not repopulate a cleared map.
         clearAll(){if(!deploySnapshot)throw Error('请先进入地图战役编辑');const previous=deployCopy(state.units);state={...state,units:[],grabbed:null};deploySnapshot={...deploySnapshot,units:[],grabbed:null};overlay={...overlay,selectedId:null,hover:null,hoverTargetId:null,intentHoverId:null,telegraph:null,offsets:{}};active=null;enemyPhase=null;moving=null;gripDrag=null;throwPrep=null;clearRoute();refreshHud();redraw();return previous;},
         checkpoint(){if(!deploySnapshot)throw Error('请先进入地图战役编辑');deploySnapshot=deployCopy(state);},
+        // Resume the same battle, retaining HP, AP, round and current positions.
+        resume(){
+            if(!state.units.some(u=>u.def.team==='ally'&&u.hp>0)||!state.units.some(u=>u.def.team==='enemy'&&u.hp>0))throw Error('继续测试需要双方都有存活角色；可编辑队伍后按「按此布阵开战」重新开始');
+            if(deploySnapshot){
+                if(JSON.stringify(state)!==JSON.stringify(deploySnapshot)){
+                    phaseBase=deployCopy(state);log=[];preEnd=null;choiceUndoId=null;postMoveChoiceId=null;clearRoute();hud?.setUndo(false);
+                }
+                deploySnapshot=null;
+            }
+            paused=false;cancelAnimationFrame(raf);refreshHud();syncInput();redraw();if(running)raf=requestAnimationFrame(frame);
+        },
         // Preserve a layout, including zero units, and close without starting combat.
         finish(){if(!deploySnapshot)return;deploymentCheck(state.units);deploySnapshot=null;paused=true;cancelAnimationFrame(raf);refreshHud();syncInput();redraw();},
         make(data){const base=deployPrototypes.find(u=>u.def.id===data.type);if(!base)throw Error('不支持的角色类型');if(!['ally','enemy'].includes(data.team))throw Error('阵营无效');if((data.team==='ally'&&data.type!=='leon')||(data.team==='enemy'&&data.type==='leon'))throw Error('我方使用 LEON 战斗模板，敌方使用 Grunt 或 Slicer；外观可用任意角色卡');if(typeof data.name!=='string'||!data.name.trim()||data.name.length>60)throw Error('名称需要 1–60 个字');if(typeof data.id!=='string'||!data.id||data.id.length>100)throw Error('单位编号无效');const u=deployCopy(base);u.id=data.id;u.def={...u.def,name:data.name,team:data.team};u.pos={x:Number(data.x),y:Number(data.y)};u.skinId=typeof data.skinId==='string'?data.skinId:null;if(data.identity)window.ArenaID.apply(u,data.identity);u.standbyEffects=data.team==='ally'?[...effects_1.DEFAULT_ALLY_STANDBY_EFFECTS]:[];return u;},
@@ -6361,6 +6372,7 @@ function createGraveyardCamera(container) {
         e.preventDefault();
         e.stopImmediatePropagation();
         dragging = null;
+        if (canvas?.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
         if (canvas)
             canvas.style.cursor = '';
     };
@@ -6496,6 +6508,8 @@ function createGraveyardCamera(container) {
         canvas.addEventListener('pointermove', onPointerMove, true);
         canvas.addEventListener('pointerup', onPointerUp, true);
         canvas.addEventListener('pointercancel', onPointerUp, true);
+        canvas.addEventListener('lostpointercapture', onPointerUp, true);
+        listeners.push(()=>canvas?.removeEventListener('lostpointercapture',onPointerUp,true));
         canvas.addEventListener('auxclick', auxclick);
         window.addEventListener('resize', onResize);
         listeners.push(() => frame?.removeEventListener('wheel', wheel), () => canvas?.removeEventListener('pointerdown', onPointerDown, true), () => canvas?.removeEventListener('pointermove', onPointerMove, true), () => canvas?.removeEventListener('pointerup', onPointerUp, true), () => canvas?.removeEventListener('pointercancel', onPointerUp, true), () => canvas?.removeEventListener('auxclick', auxclick), () => window.removeEventListener('resize', onResize));
@@ -11681,7 +11695,19 @@ function run(fn){try{fn();}catch(e){notice(e.message);}}
 function update(){const units=api().inspect().units;by('depCount').textContent=`总人数 ${units.length} / 40 · 我方 ${units.filter(u=>u.def.team==='ally').length} · 敌方 ${units.filter(u=>u.def.team==='enemy').length}`;const list=by('depUnits');list.replaceChildren();for(const u of units){const b=document.createElement('button');b.textContent=`${u.def.team==='ally'?'🔵':'🔴'} ${u.def.name}　(${u.pos.x.toFixed(2)}, ${u.pos.y.toFixed(2)})`;b.className=u.id===picked?'selected':'';b.onclick=()=>select(u.id);list.append(b);}const u=units.find(u=>u.id===picked);by('depSelected').textContent=u?'已选：'+u.def.name:'点击地图人物或列表选择';for(const id of ['depX','depY','depUnitName','depApply','depRemove'])by(id).disabled=!u;if(u){by('depX').value=u.pos.x.toFixed(2);by('depY').value=u.pos.y.toFixed(2);by('depUnitName').value=u.def.name;}api().choose(picked);}
 function select(id){picked=id;tool='select';by('depPlace').classList.remove('selected');update();notice('拖动地图上的人物，或输入精确坐标后应用。');}
 function toggle(on){by('deployPanel').hidden=!on;by('deployOpen').hidden=false;by('deployOpen').textContent=on?'✕ 收起编辑':'♟ 地图战役编辑';by('deployOpen').setAttribute('aria-expanded',String(on));document.body.classList.toggle('deploying',on);if(on){picked=null;tool='select';lastCleared=null;by('depUndoClear').hidden=true;update();notice('地图战役编辑中。清空队伍后可立即保留空地图，也可以重新放置队伍。');}else{by('deployOpen').textContent=api().inspect().units.length?'♟ 地图战役编辑':'♟ 地图战役编辑 · 空地图';}}
-by('deployOpen').onclick=()=>run(()=>{if(api().active){api().finish();toggle(false);}else{api().begin();toggle(true);}});by('depCancel').onclick=()=>run(()=>{api().cancel();toggle(false);});by('depKeep').onclick=()=>run(()=>{api().finish();toggle(false);});by('depStart').onclick=()=>run(()=>{api().commit();toggle(false);});
+// Both Studio and the standalone page use this controller and the same live canvas.
+window.ArenaEditor={
+ enter(){api().begin();toggle(true);this.onModeChange?.(false);},
+ resume(){api().resume();toggle(false);this.onModeChange?.(true);},
+ keep(){api().finish();toggle(false);}
+};
+const resumeButton=document.createElement('button');resumeButton.id='depResume';resumeButton.type='button';resumeButton.className='full primary';resumeButton.textContent='▶ 应用调整并继续游戏 · F8';
+by('depKeep').before(resumeButton);resumeButton.onclick=()=>run(()=>window.ArenaEditor.resume());
+by('deployOpen').onclick=()=>run(()=>api().active?window.ArenaEditor.keep():window.ArenaEditor.enter());
+by('depCancel').onclick=()=>run(()=>{api().cancel();toggle(false);window.ArenaEditor.onModeChange?.(true);});
+by('depKeep').onclick=()=>run(()=>window.ArenaEditor.keep());
+by('depStart').onclick=()=>run(()=>{api().commit();toggle(false);window.ArenaEditor.onModeChange?.(true);});
+window.addEventListener('keydown',e=>{if(e.code!=='F8'||e.repeat||e.target.closest?.('input,select,textarea,[contenteditable=true]'))return;e.preventDefault();e.stopImmediatePropagation();if(window.ArenaEditor.hostToggle)window.ArenaEditor.hostToggle();else run(()=>api().active?window.ArenaEditor.resume():window.ArenaEditor.enter());},true);
 by('depTeam').onchange=()=>{const ally=by('depTeam').value==='ally';for(const o of by('depType').options)o.disabled=ally?o.value!=='leon':o.value==='leon';by('depType').value=ally?'leon':'grunt';};by('depTeam').onchange();
 function offsets(count,formation,gap){const out=[];const cols=Math.ceil(Math.sqrt(count));for(let i=0;i<count;i++){let x=0,y=0;if(formation==='line'){x=i-(count-1)/2;}else if(formation==='column'){y=i-(count-1)/2;}else if(formation==='wedge'){const rank=Math.ceil(i/2);x=i===0?0:(i%2?-rank:rank);y=rank;}else{const row=Math.floor(i/cols),rowCount=Math.min(cols,count-row*cols);x=i%cols-(rowCount-1)/2;y=row-(Math.ceil(count/cols)-1)/2;}out.push({x:x*gap,y:y*gap});}return out;}
 window.DBFormationOffsets=offsets;
@@ -11752,9 +11778,17 @@ by('depExportGame').onclick=()=>run(()=>{
 });
 
 // Capture map input before the battle router; CSS handles camera scaling and zoom.
-document.addEventListener('pointerdown',e=>{if(!window.DBDeployment?.active||e.target!==api().canvas||e.button!==0)return;e.preventDefault();e.stopImmediatePropagation();run(()=>{const p=api().point(e);if(tool==='place'){place(p);return;}const u=api().inspect().units.find(u=>Math.hypot(u.pos.x-p.x,u.pos.y-p.y)<u.def.radius+.15);if(!u){picked=null;update();return;}select(u.id);drag={id:u.id,pointer:e.pointerId};api().canvas.setPointerCapture(e.pointerId);});},true);
-document.addEventListener('pointermove',e=>{if(!window.DBDeployment?.active||e.target!==api().canvas)return;e.stopImmediatePropagation();if(!drag)return;run(()=>{const p=api().point(e),units=api().inspect().units,u=units.find(u=>u.id===drag.id);u.pos=p;api().replace(units);by('depX').value=p.x.toFixed(2);by('depY').value=p.y.toFixed(2);notice('正在拖动人物…');});},true);
-document.addEventListener('pointerup',e=>{if(!window.DBDeployment?.active||e.target!==api().canvas)return;e.stopImmediatePropagation();if(drag){drag=null;update();notice('位置已调整。');}},true);
+document.addEventListener('pointerdown',e=>{if(!window.DBDeployment?.active||e.target!==api().canvas||e.button!==0||e.shiftKey)return;e.preventDefault();e.stopImmediatePropagation();run(()=>{const p=api().point(e);if(tool==='place'){place(p);return;}const u=api().inspect().units.find(u=>Math.hypot(u.pos.x-p.x,u.pos.y-p.y)<u.def.radius+.15);if(!u){picked=null;update();return;}select(u.id);drag={id:u.id,pointer:e.pointerId};api().canvas.setPointerCapture(e.pointerId);});},true);
+document.addEventListener('pointermove',e=>{if(!window.DBDeployment?.active||e.target!==api().canvas||!drag||drag.pointer!==e.pointerId)return;e.stopImmediatePropagation();run(()=>{const p=api().point(e),units=api().inspect().units,u=units.find(u=>u.id===drag.id);u.pos=p;api().replace(units);by('depX').value=p.x.toFixed(2);by('depY').value=p.y.toFixed(2);notice('正在拖动人物…');});},true);
+function endUnitDrag(e){
+ if(!drag||drag.pointer!==e.pointerId)return;
+ e.stopImmediatePropagation();drag=null;
+ if(api().canvas.hasPointerCapture(e.pointerId))api().canvas.releasePointerCapture(e.pointerId);
+ update();notice(e.type==='pointercancel'?'拖动已中止，保留最后有效位置。':'位置已调整。');
+}
+document.addEventListener('pointerup',endUnitDrag,true);
+document.addEventListener('pointercancel',endUnitDrag,true);
+api().canvas.addEventListener('lostpointercapture',endUnitDrag);
 document.addEventListener('pointercancel',()=>drag=null,true);
 document.addEventListener('keydown',e=>{if(!window.DBDeployment?.active)return;if(e.target.closest('input,select,textarea')){e.stopPropagation();return;}if(e.key==='Escape'){tool='select';drag=null;by('depPlace').classList.remove('selected');notice('已退出放置模式。');}e.stopPropagation();},true);
 (async()=>{try{for(const c of window.DBCharacterLibrary)await addSkin(JSON.parse(JSON.stringify(c)));if(skins.size){const key=skins.keys().next().value;by('depSkin').value=key;by('depName').value=skins.get(key).card.name;}try{const saved=localStorage.getItem('arena-unused-character');if(saved){const c=JSON.parse(saved);if(c.name!=='LEON · 棺之骑士'){window.DBMigrateCard(c);if(!window.DBCharacterLibrary.some(v=>v.sheet===c.sheet))await addSkin(c);}}}catch{}let selected=null;
