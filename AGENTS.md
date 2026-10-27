@@ -24,3 +24,4 @@ The owner's priority is fast, narrowly scoped game edits without requiring progr
 - Routine implementation decisions are the agent's responsibility. The owner wants to describe behavior, not choose programming details. Preserve their explicit constraints and deletions.
 - Read `campaigns/README.md` before adding a map. The shared map validator is used by Node checks and the browser. A map loading error must be visible, never silently replaced with another map.
 - Await `ArenaCampaignReady` / `ArenaCampaignLoaded` before using deployment APIs. Verify full HTML exports with networking disabled after changes to map loading or assets.
+- Character publishing is implemented in `studio/`; read `docs/PUBLISHING.md`. Keep credentials in page memory only. Never write them into browser storage, repository files, logs or export data. Keep character files and `角色卡/library.json` in one atomic Git commit and never force-update a branch.

@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { root } from '../tools/site.mjs';
 import { startServer } from '../tools/serve.mjs';
+import { FakeGitHub, TOKEN } from './github-fixture.mjs';
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
 let browser, preview;
 before(async () => {
@@ -103,6 +104,78 @@ test('ID animation pauses in the background and resumes when opened', async t =>
   await page.locator('#arenaTab').click(); await page.waitForTimeout(100);
   const stopped=await editor.evaluate(() => window.testDrawCount);await page.waitForTimeout(100);
   assert.equal(await editor.evaluate(() => window.testDrawCount), stopped);
+});
+async function routeGitHub(page,github){
+  page.on('requestfailed',request=>{if(request.url().startsWith('https://api.github.com/'))console.log('GitHub test request failed:',request.failure()?.errorText);});
+  await page.route('https://api.github.com/**',async route=>{
+    const request=route.request(),cors={'access-control-allow-origin':'*','access-control-allow-headers':'authorization,content-type,x-github-api-version,accept','access-control-allow-methods':'GET,POST,PATCH,OPTIONS','content-type':'application/json'};
+    if(request.method()==='OPTIONS'){await route.fulfill({status:204,headers:cors});return;}
+    const headers=await request.allHeaders();
+    const response=await github.fetch(request.url(),{method:request.method(),headers:{Authorization:headers.authorization},body:request.postData()});
+    await route.fulfill({status:response.status,headers:cors,body:await response.text()});
+  });
+}
+async function newPublishingDraft(page){
+  await page.evaluate(async()=>{
+    await GRAStudio.ready;const jay=await get('Jay');
+    await save('publish-fixture',{...jay.card,name:'发布测试角色'});await render();
+  });
+  await page.locator('#libraryToggle').click();
+  await page.locator('[data-publish-character="publish-fixture"]').click();
+  await page.locator('#githubPublishDialog').waitFor();
+}
+test('one-click publishing uses session-only credentials and records a successful commit',async t=>{
+  const {page}=await studio(t),github=new FakeGitHub();await routeGitHub(page,github);await newPublishingDraft(page);
+  const authorize=await page.locator('[data-authorize]').getAttribute('href');assert.match(authorize,/^https:\/\/github\.com\/settings\/personal-access-tokens\/new\?/);
+  await page.locator('#githubToken').fill(TOKEN);await page.locator('[data-connect-submit]').click();
+  await page.locator('[data-result]').waitFor();assert.equal(github.library().characters[0].name,'发布测试角色');
+  assert.equal(await page.locator('#githubToken').inputValue(),'');
+  assert.equal(await page.evaluate(async token=>{
+    const local=await get('publish-fixture');
+    return !JSON.stringify(local).includes(token)&&Object.values(localStorage).every(value=>!value.includes(token))&&Object.values(sessionStorage).every(value=>!value.includes(token))&&local.dirty===false&&/^[a-f0-9]{40}$/.test(local.sourceSHA);
+  },TOKEN),true);
+  assert.match(await page.locator('[data-result]').getAttribute('href'),/^https:\/\/github\.com\/x6nightfox6x-a11y\/genesis-rhapsody-arena\/commit\/[a-f0-9]{40}$/);
+  await page.locator('[data-close]').click();await page.reload();await page.locator('#githubConnect').waitFor();
+  assert.match(await page.locator('#githubConnect').innerText(),/未连接/);
+});
+test('failed GitHub publication preserves local draft and never displays success',async t=>{
+  const {page}=await studio(t),github=new FakeGitHub();github.failPatch=403;await routeGitHub(page,github);await newPublishingDraft(page);
+  await page.locator('#githubToken').fill(TOKEN);await page.locator('[data-connect-submit]').click();
+  await page.locator('[data-message]').filter({hasText:'拒绝写入'}).waitFor();
+  assert.equal(await page.locator('[data-result]').isVisible(),false);assert.equal(github.library().characters.length,0);
+  assert.equal(await page.evaluate(async()=>{const draft=await get('publish-fixture');return draft.card.name==='发布测试角色'&&draft.dirty===true;}),true);
+});
+test('published library discovers new files without changing the Studio code',async t=>{
+  const library=JSON.parse(await readFile(path.join(root,'角色卡/library.json'),'utf8'));
+  const card=JSON.parse(await readFile(path.join(root,'角色卡/Jay.downbeat.json'),'utf8'));card.name='自动发现角色';
+  library.characters.push({id:'discovered',name:card.name,file:'dynamic.downbeat.json',sha:'a'.repeat(40)});
+  const {page}=await studio(t,async page=>{
+    await page.route('**/library.json',route=>route.fulfill({json:library}));
+    await page.route('**/dynamic.downbeat.json',route=>route.fulfill({json:card}));
+  });
+  await page.evaluate(()=>GRAStudio.ready);
+  assert.equal(await page.evaluate(async()=>(await get('discovered')).card.name),'自动发现角色');
+});
+test('standalone character editor can publish without opening the Arena backend',async t=>{
+  const {page}=await studio(t),github=new FakeGitHub();await routeGitHub(page,github);
+  await page.goto(preview.url+'/Downbeat_ID_Card_Studio.html');await page.locator('#publishGitHub').waitFor();
+  await page.waitForFunction(()=>typeof window.normalized==='function'&&typeof window.warmSprites==='function');
+  await page.locator('#publishGitHub').click();await page.locator('#githubToken').fill(TOKEN);await page.locator('[data-connect-submit]').click();
+  await page.locator('[data-result]').waitFor();assert.equal(github.library().characters.length,1);
+  assert.equal(await page.locator('#githubToken').inputValue(),'');
+});
+test('creating a character after editing Jay publishes a new ID without overwriting Jay',async t=>{
+  const {page}=await studio(t),github=new FakeGitHub();await routeGitHub(page,github);
+  await page.evaluate(async()=>{await GRAStudio.ready;await editCard('Jay');});
+  const editor=page.frames().find(frame=>frame.url().endsWith('/Downbeat_ID_Card_Studio.html'));
+  await editor.locator('#idAdd').click();await editor.locator('#idNew').click();
+  await editor.locator('#name').fill('全新发布角色');await editor.locator('#name').press('Tab');
+  await page.locator('#publishGitHub').click();await page.locator('#githubToken').fill(TOKEN);await page.locator('[data-connect-submit]').click();await page.locator('[data-result]').waitFor();
+  const published=github.library().characters[0];assert.notEqual(published.id,'Jay');assert.equal(published.name,'全新发布角色');
+  assert.equal(await page.evaluate(async()=>(await get('Jay')).card.name),'Jay');
+  await page.locator('[data-close]').click();await editor.locator('#name').fill('改名后的发布角色');await editor.locator('#name').press('Tab');
+  await page.locator('#publishGitHub').click();await page.locator('[data-result]').waitFor();
+  assert.equal(github.library().characters.length,1);assert.equal(github.library().characters[0].id,published.id);assert.equal(github.library().characters[0].name,'改名后的发布角色');
 });
 for (const mode of ['melee', 'ranged']) test(`Jay ${mode} aims and damages an enemy`, async t => {
   const { page, frame } = await studio(t);

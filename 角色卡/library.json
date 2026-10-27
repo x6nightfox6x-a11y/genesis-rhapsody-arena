@@ -1,0 +1,24 @@
+{
+  "format": "gra-character-library",
+  "version": 1,
+  "characters": [
+    {
+      "id": "Jay",
+      "name": "Jay",
+      "file": "Jay.downbeat.json",
+      "sha": "b35e39ddfd4f1285e00b4473d722576d5e988f7a"
+    },
+    {
+      "id": "LEON",
+      "name": "LEON",
+      "file": "LEON.downbeat.json",
+      "sha": "1320577188f83e689ae541707be3f9fb444409ae"
+    },
+    {
+      "id": "白面神官",
+      "name": "白面神官",
+      "file": "白面神官.downbeat.json",
+      "sha": "7f329463cc2f37df4a93748aa0e51f5d602df44c"
+    }
+  ]
+}
