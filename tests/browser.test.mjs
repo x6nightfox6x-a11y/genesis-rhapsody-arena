@@ -51,6 +51,8 @@ test('Studio campaign, fixed viewport, map pan and test/editor round trip', asyn
   await page.locator('#studioLang').selectOption('zh');
   const geometry = await frame.evaluate(() => { const r = document.querySelector('.graveyard-camera').getBoundingClientRect(); return { x: r.x, width: r.width, height: r.height, expectedHeight: innerHeight }; });
   assert.equal(geometry.width, 1152); assert.equal(geometry.x, 144); assert.equal(geometry.height, geometry.expectedHeight);
+  await frame.evaluate(async () => DBDeployment.insertID(await ArenaRuntime.prepare(await (await fetch('角色卡/Jay.downbeat.json')).json())));
+  assert.equal(await frame.locator('.hud').isVisible(), false, 'editing hides the entire action panel, including after selecting a character');
   const before = await frame.evaluate(() => DBDeployment.inspect());
   await page.mouse.move(650, 400); await page.mouse.wheel(0, -600);
   const oldTransform = await frame.evaluate(() => DBDeployment.canvas.style.transform);
@@ -58,7 +60,9 @@ test('Studio campaign, fixed viewport, map pan and test/editor round trip', asyn
   assert.notEqual(await frame.evaluate(() => DBDeployment.canvas.style.transform), oldTransform);
   assert.deepEqual(await frame.evaluate(() => DBDeployment.inspect()), before, 'panning must not edit units');
   await page.locator('#testGame').click(); assert.equal(await frame.evaluate(() => DBDeployment.active), false);
+  assert.equal(await frame.locator('.hud').isVisible(), true, 'testing restores the action panel');
   await page.locator('#endTest').click(); assert.equal(await frame.evaluate(() => DBDeployment.active), true);
+  assert.equal(await frame.locator('.hud').isVisible(), false, 'returning to the editor hides the action panel again');
   assert.deepEqual(await frame.evaluate(() => DBDeployment.inspect()), before, 'switching must preserve roster');
 });
 test('game panning owns the camera, cancels pending aim and releases pointer capture', async t => {
