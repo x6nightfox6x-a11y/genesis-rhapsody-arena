@@ -37,13 +37,13 @@ jobs:
         run: |
           python3 -m json.tool campaigns/manifest.json > /dev/null
           python3 -m json.tool campaigns/arena-001/campaign.json > /dev/null
-          for file in "Arena game.html" index.html game.html studio.html Downbeat_ID_Card_Studio.html Downbeat_game.html; do
+          for file in "Arena game.html" index.html game.html studio.html Downbeat_ID_Card_Studio.html; do
             test -s "$file" || { echo "::error::Missing $file"; exit 1; }
           done
       - name: Prepare lean website artifact
         run: |
           mkdir -p _site
-          cp "Arena game.html" index.html game.html studio.html Downbeat_ID_Card_Studio.html Downbeat_game.html _site/
+          cp "Arena game.html" index.html game.html studio.html Downbeat_ID_Card_Studio.html _site/
           cp -R campaigns Pic 角色卡 _site/
           # Exclude GRA.rar, documentation, repository metadata, and historical backups.
       - name: Upload artifact
