@@ -13,3 +13,12 @@ The owner's priority is fast, narrowly scoped game edits without requiring progr
 - Prefer minimal diffs, retain game behavior and existing UI layout, and avoid unrelated refactors. For substantial changes, make a separate branch and PR.
 - Do not edit generated or duplicated output instead of the canonical source. Check dependencies before moving data out of large HTML files.
 - Before submitting, validate affected JavaScript/JSON and verify changed load paths; if runtime testing is unavailable, state that explicitly.
+
+# Repeatable development tools
+
+- Read `docs/DEVELOPMENT.md` for the code ownership map. Embedded `src/...ts` labels are not separate source files.
+- Use `npm run inspect -- --find "symbol"` or `--module inputRouter` to locate code without dumping embedded image data.
+- `npm run check` validates all pages, scripts, JSON, links and campaign descriptors. `npm test` also builds the deployment artifact and runs isolated browser regressions, including Jay melee and ranged attacks.
+- `npm run dev` starts a loopback preview. `npm run build` is the same allowlisted packaging used by Pages. Add new public resource directories to `tools/site.mjs`.
+- Do not commit generated `_site/`, installed dependencies or test screenshots. Run meaningful checks before opening a PR; report any actual failures.
+- Routine implementation decisions are the agent's responsibility. The owner wants to describe behavior, not choose programming details. Preserve their explicit constraints and deletions.
