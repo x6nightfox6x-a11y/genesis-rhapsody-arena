@@ -200,7 +200,7 @@ status('已加载 GitHub 角色库：'+filenames.length+' 张，新增 '+added+'
 }
 connect().then(async d=>{db=d;await render();await loadPublishedCards()}).catch(e=>status('角色库不可用：'+e.message));
 
-/* Campaign selection: additive Studio feature; original Arena game is unchanged. */
+/* Campaign selection: original Arena game is unchanged. */
 (async function graLoadCampaigns(){
  const pick=document.getElementById('campaignSelect'),frame=document.getElementById('arena');
  try{
@@ -208,7 +208,7 @@ connect().then(async d=>{db=d;await render();await loadPublishedCards()}).catch(
   if(!response.ok)throw Error('HTTP '+response.status);
   const manifest=await response.json();
   if(!Array.isArray(manifest.campaigns)||!manifest.campaigns.length)throw Error('战役列表为空');
-  const campaigns=manifest.campaigns.filter(c=>c&&typeof c.id==='string'&&typeof c.title==='string'&&typeof c.engine==='string'&&/^[a-zA-Z0-9_./-]+\\.html$/.test(c.engine)&&!c.engine.includes('..'));
+  const campaigns=manifest.campaigns.filter(c=>c&&typeof c.id==='string'&&typeof c.title==='string'&&typeof c.engine==='string'&&c.engine.endsWith('.html')&&!c.engine.includes('..')&&!c.engine.startsWith('/'));
   if(!campaigns.length)throw Error('没有有效战役');
   pick.replaceChildren();
   for(const campaign of campaigns){const option=document.createElement('option');option.value=campaign.id;option.textContent=campaign.title;pick.appendChild(option)}
