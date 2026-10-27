@@ -1,7 +1,7 @@
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root=path.join(__dirname,'..');
-for(const name of ['index.html','Arena game.html','studio.html']){
+for(const name of ['index.html','Arena game.html','studio.html','Downbeat_ID_Card_Studio.html']){
  const html=fs.readFileSync(path.join(root,name),'utf8');
  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)){if(m[0].includes('application/json'))continue;try{new Function(m[1])}catch(e){throw Error(name+': '+e.message)}}
 }
@@ -14,6 +14,16 @@ const server=http.createServer((req,res)=>{const p=path.join(root,decodeURICompo
  await page.goto(`http://127.0.0.1:${server.address().port}/studio.html`);
  const frame=page.frames().find(f=>f.url().endsWith('/index.html'));
  await frame.waitForFunction(()=>window.ArenaEditor&&window.DBDeployment.active&&window.ArenaEditor.hostToggle);
+ assert.equal(await page.locator('#editor').getAttribute('src'),null,'ID editor loads only on demand');
+ assert.equal(await frame.locator('#deployPanel details').count(),2);
+ const editorReady=page.waitForEvent('framenavigated',{predicate:f=>f.url().endsWith('/Downbeat_ID_Card_Studio.html')});
+ await page.locator('#editorTab').click();
+ const editorFrame=await editorReady;
+ await editorFrame.waitForFunction(()=>window.DBSetPreviewActive&&window.DBCard);
+ await editorFrame.evaluate(()=>{window.previewDraws=0;const draw=DBCard.draw;DBCard.draw=function(...args){window.previewDraws++;return draw.apply(this,args)}});
+ await page.locator('#arenaTab').click();await page.waitForTimeout(100);
+ const draws=await editorFrame.evaluate(()=>window.previewDraws);await page.waitForTimeout(150);
+ assert.equal(await editorFrame.evaluate(()=>window.previewDraws),draws,'hidden editor stops drawing');
  const state=()=>frame.evaluate(()=>window.DBDeployment.inspect());
  const transform=()=>frame.evaluate(()=>window.DBDeployment.canvas.style.transform);
  const geometry=()=>frame.evaluate(()=>{const r=document.querySelector('.graveyard-camera').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}});

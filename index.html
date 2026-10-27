@@ -2648,6 +2648,8 @@ function createGame() {
         (0, canvasRenderer_1.drawBattle)(ctx, rangeState, { ...overlay, debug: debugOn, pick, intents,
             jumpReachPreview, jumpChoiceAffordable });
     };
+    // A paused editor still needs newly exposed map pixels after pan/zoom.
+    window.DBArenaInvalidate = () => { if (paused) redraw(); };
     /** Hit stops that wait for the moment a pushed unit reaches what it crashes into. */
     let holds = [];
     /** Banners that wait for a moment in the playback (virtual time). */
@@ -6130,6 +6132,7 @@ function createGraveyardCamera(container) {
         canvas.style.setProperty('width',canvas.width*scale+'px','important');
         canvas.style.setProperty('height',canvas.height*scale+'px','important');
         clamp();canvas.style.transform=`translate3d(${offsetX}px, ${offsetY}px, 0) scale(${zoom})`;
+        window.DBArenaInvalidate?.();
         if(value)value.textContent=Math.round(zoom*100)+'%';
         const zoomInput=document.getElementById('arenaZoomPercent');if(zoomInput&&document.activeElement!==zoomInput)zoomInput.value=String(Math.round(zoom*100));
     };
@@ -6436,7 +6439,8 @@ function createGraveyardCamera(container) {
             miniPanel.hidden=!miniPanel.hidden;
             miniToggle.setAttribute('aria-expanded',String(!miniPanel.hidden));
             miniToggle.textContent=miniPanel.hidden?'▣ Mini Map':'✕ 收起地图';
-            if(!miniPanel.hidden) drawMiniMap();
+            cancelAnimationFrame(miniFrame);miniFrame=0;
+            if(!miniPanel.hidden){drawMiniMap();miniFrame=requestAnimationFrame(miniTick);}
         });
         const drawMiniMap=()=>{
             if(miniPanel.hidden || !canvas || !frame)return;
@@ -6487,8 +6491,7 @@ function createGraveyardCamera(container) {
         miniCanvas.addEventListener('pointerdown',e=>{miniCanvas.setPointerCapture(e.pointerId);onMiniPointer(e)});
         miniCanvas.addEventListener('pointermove',e=>{if(e.buttons===1)onMiniPointer(e)});
         let miniFrame=0;let miniLast=0;
-        const miniTick=now=>{if(!frame)return;if(now-miniLast>100){miniLast=now;drawMiniMap()}miniFrame=requestAnimationFrame(miniTick)};
-        miniFrame=requestAnimationFrame(miniTick);
+        const miniTick=now=>{if(!frame||miniPanel.hidden)return;if(now-miniLast>100){miniLast=now;drawMiniMap()}miniFrame=requestAnimationFrame(miniTick)};
         listeners.push(()=>{cancelAnimationFrame(miniFrame);miniDock.remove()});
         minus.addEventListener('click', () => setZoom(zoom / 1.25));
         plus.addEventListener('click', () => setZoom(zoom * 1.25));
@@ -8276,6 +8279,15 @@ function drawPopups(ctx, popups, now) {
 function drawBattle(ctx, state, overlay, now = clock.now()) {
     const zoom = clock.slowZoom();
     ctx.save();
+    // Keep logical map coordinates and hit tests unchanged; rasterize only the viewport.
+    const rect=ctx.canvas.getBoundingClientRect(),view=ctx.canvas.parentElement?.getBoundingClientRect();
+    if(view&&rect.width>0&&rect.height>0){
+        const sx=ctx.canvas.width/rect.width,sy=ctx.canvas.height/rect.height;
+        const left=Math.max(rect.left,view.left,0),top=Math.max(rect.top,view.top,0);
+        const right=Math.min(rect.right,view.right,innerWidth),bottom=Math.min(rect.bottom,view.bottom,innerHeight);
+        ctx.beginPath();ctx.rect((left-rect.left)*sx,(top-rect.top)*sy,Math.max(0,right-left)*sx,Math.max(0,bottom-top)*sy);ctx.clip();
+    }
+    ctx.save();
     if (zoom > 0 && overlay.focus) {
         const f = toCanvas(overlay.focus);
         const k = 1 + clock.getZoomMax() * zoom;
@@ -8315,6 +8327,7 @@ function drawBattle(ctx, state, overlay, now = clock.now()) {
             text(ctx, 'release to cancel', { x, y }, COLORS.impact);
         }
     }
+    ctx.restore();
 }
 
 },
@@ -11701,6 +11714,13 @@ window.ArenaEditor={
  resume(){api().resume();toggle(false);this.onModeChange?.(true);},
  keep(){api().finish();toggle(false);}
 };
+function foldEditorControls(title,start,end){
+ const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent=title;details.append(summary);start.before(details);
+ let node=start;while(node){const next=node.nextSibling;details.append(node);if(node===end)break;node=next;}
+ summary.style.cssText='cursor:pointer;padding:10px 0;color:#bfe3ff';return details;
+}
+foldEditorControls('存档与导出',by('depBattleName').previousElementSibling,by('depExportGame').nextElementSibling);
+foldEditorControls('人数、间距与阵型',by('depAmount').closest('.pair'),by('depFormation'));
 const resumeButton=document.createElement('button');resumeButton.id='depResume';resumeButton.type='button';resumeButton.className='full primary';resumeButton.textContent='▶ 应用调整并继续游戏 · F8';
 by('depKeep').before(resumeButton);resumeButton.onclick=()=>run(()=>window.ArenaEditor.resume());
 by('deployOpen').onclick=()=>run(()=>api().active?window.ArenaEditor.keep():window.ArenaEditor.enter());
