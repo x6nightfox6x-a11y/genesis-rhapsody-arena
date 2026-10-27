@@ -22,8 +22,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    uses: ./.github/workflows/check.yml
   # Single deploy job since we're just deploying
   deploy:
+    needs: validate
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -33,19 +36,11 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Validate campaign JSON and required site files
-        run: |
-          python3 -m json.tool campaigns/manifest.json > /dev/null
-          python3 -m json.tool campaigns/arena-001/campaign.json > /dev/null
-          for file in "Arena game.html" index.html game.html studio.html Downbeat_ID_Card_Studio.html; do
-            test -s "$file" || { echo "::error::Missing $file"; exit 1; }
-          done
-      - name: Prepare lean website artifact
-        run: |
-          mkdir -p _site
-          cp "Arena game.html" index.html game.html studio.html Downbeat_ID_Card_Studio.html _site/
-          cp -R campaigns Pic 角色卡 _site/
-          # Exclude GRA.rar, documentation, repository metadata, and historical backups.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate and prepare lean website artifact
+        run: node tools/build.mjs
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
