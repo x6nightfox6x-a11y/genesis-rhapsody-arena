@@ -1,0 +1,13 @@
+{
+  "format": "gra-campaign",
+  "version": 1,
+  "id": "arena-001",
+  "name": "Arena · Campaign 001",
+  "status": "legacy-embedded",
+  "engine": "../../index.html",
+  "map": {
+    "source": "legacy-engine",
+    "note": "现有地图仍内嵌在 index.html；后续提取地图数据时替换为外部资源路径。"
+  },
+  "notes": "此清单是拆分架构第一阶段，不修改原战斗逻辑或地图数据。"
+}
