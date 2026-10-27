@@ -293,3 +293,22 @@ for (const failure of ['invalid-map', 'missing-background']) test(`map startup s
   await page.locator('#arena-map-error').waitFor();
   assert.equal(await page.locator('canvas.graveyard-game-canvas').count(), 0);
 });
+
+
+test('collision view hides artwork without changing the shared map and survives mode switches', async t => {
+  const { page, frame } = await studio(t);
+  const before=await frame.evaluate(()=>DBDeployment.inspect());
+  const canvas=frame.locator('canvas.graveyard-game-canvas');
+  const painted=await canvas.screenshot();
+  const toggle=frame.locator('#arenaCollisionToggle');await toggle.click();
+  assert.equal(await toggle.getAttribute('aria-pressed'),'true');
+  assert.notDeepEqual(await canvas.screenshot(),painted,'collision geometry must visibly replace the artwork');
+  assert.deepEqual(await frame.evaluate(()=>DBDeployment.inspect()),before);
+  await page.locator('#testGame').click();
+  assert.equal(await frame.evaluate(()=>DBMapView.collision),true);
+  await page.locator('#endTest').click();
+  assert.equal(await toggle.getAttribute('aria-pressed'),'true');
+  await toggle.click();assert.equal(await toggle.getAttribute('aria-pressed'),'false');
+  assert.deepEqual(await canvas.screenshot(),painted,'restoring the skin must reproduce the editor view');
+  assert.deepEqual(await frame.evaluate(()=>DBDeployment.inspect()),before);
+});
