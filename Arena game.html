@@ -1713,6 +1713,10 @@ body > .hud-big .hud-big-btn { pointer-events:auto!important; }
  box-sizing:border-box!important;border:1px solid #394559!important;
  border-radius:0!important;overflow:hidden!important;
 }
+</style><style id="arena-editor-hud-visibility">
+/* Editing state belongs to DBDeployment, independently of the editor drawer. */
+body.arena-editing #app .hud,
+body.arena-editing #arenaSkillsPicker {display:none!important;}
 </style><style id="arena-hotbar-ui">
 /* Keep the approved HUD footprint and central 80vw viewport. Popups never reflow either. */
 #app .hud .hud-bar .hud-btn[data-mode="skills"]::after{content:"W"}
@@ -5395,19 +5399,19 @@ function createGame() {
         get active(){return !!deploySnapshot;},
         inspect(){return deployCopy({units:state.units,arena:state.arena});},
         setDefaultRoster(){deploymentCheck(state.units);window.__DBDefaultBattleState=deployCopy({...state,units:state.units.map(u=>({...u,hp:u.def.hp,baseHp:u.def.hp,stunned:false,installedEffects:[]})),turn:{moved:[],acted:[],walked:{}},grabbed:null});return state.units.length;},
-        begin(){if(deploySnapshot)return;if(active||enemyPhase||moving||state.grabbed||throwPrep)throw Error('请等待当前动作结束，并放下抓取的角色后再布阵');deploySnapshot=deployCopy(state);paused=true;cancelAnimationFrame(raf);syncInput();redraw();},
-        cancel(){if(!deploySnapshot)return;state=deploySnapshot;deploySnapshot=null;const ready=state.units.some(u=>u.def.team==='ally')&&state.units.some(u=>u.def.team==='enemy');paused=!ready;refreshHud();syncInput();redraw();if(running&&!paused)raf=requestAnimationFrame(frame);},
+        begin(){if(deploySnapshot)return;if(active||enemyPhase||moving||state.grabbed||throwPrep)throw Error('请等待当前动作结束，并放下抓取的角色后再布阵');deploySnapshot=deployCopy(state);document.body.classList.add("arena-editing");paused=true;cancelAnimationFrame(raf);syncInput();redraw();},
+        cancel(){if(!deploySnapshot)return;state=deploySnapshot;deploySnapshot=null;document.body.classList.remove("arena-editing");const ready=state.units.some(u=>u.def.team==='ally')&&state.units.some(u=>u.def.team==='enemy');paused=!ready;refreshHud();syncInput();redraw();if(running&&!paused)raf=requestAnimationFrame(frame);},
         // Editor clearing is persistent: closing with Cancel must not repopulate a cleared map.
         clearAll(){if(!deploySnapshot)throw Error('请先进入地图战役编辑');const previous=deployCopy(state.units);state={...state,units:[],grabbed:null};deploySnapshot={...deploySnapshot,units:[],grabbed:null};overlay={...overlay,selectedId:null,hover:null,hoverTargetId:null,intentHoverId:null,telegraph:null,offsets:{}};active=null;enemyPhase=null;moving=null;gripDrag=null;throwPrep=null;clearRoute();refreshHud();redraw();return previous;},
         checkpoint(){if(!deploySnapshot)throw Error('请先进入地图战役编辑');deploySnapshot=deployCopy(state);},
         // Preserve a layout, including zero units, and close without starting combat.
-        finish(){if(!deploySnapshot)return;deploymentCheck(state.units);deploySnapshot=null;paused=true;cancelAnimationFrame(raf);refreshHud();syncInput();redraw();},
+        finish(){if(!deploySnapshot)return;deploymentCheck(state.units);deploySnapshot=null;document.body.classList.remove("arena-editing");paused=true;cancelAnimationFrame(raf);refreshHud();syncInput();redraw();},
         make(data){const base=deployPrototypes.find(u=>u.def.id===data.type);if(!base)throw Error('不支持的角色类型');if(!['ally','enemy'].includes(data.team))throw Error('阵营无效');if((data.team==='ally'&&data.type!=='leon')||(data.team==='enemy'&&data.type==='leon'))throw Error('我方使用 LEON 战斗模板，敌方使用 Grunt 或 Slicer；外观可用任意角色卡');if(typeof data.name!=='string'||!data.name.trim()||data.name.length>60)throw Error('名称需要 1–60 个字');if(typeof data.id!=='string'||!data.id||data.id.length>100)throw Error('单位编号无效');const u=deployCopy(base);u.id=data.id;u.def={...u.def,name:data.name,team:data.team};u.pos={x:Number(data.x),y:Number(data.y)};u.skinId=typeof data.skinId==='string'?data.skinId:null;if(data.identity)window.ArenaID.apply(u,data.identity);u.standbyEffects=data.team==='ally'?[...effects_1.DEFAULT_ALLY_STANDBY_EFFECTS]:[];return u;},
         replace(units){if(!deploySnapshot)throw Error('请先打开布阵模式');deploymentCheck(units);state={...state,units:deployCopy(units)};overlay={...overlay,selectedId:null,hover:null,hoverTargetId:null,telegraph:null,offsets:{}};refreshHud();redraw();},
         choose(id){if(deploySnapshot){overlay.selectedId=id;redraw();}},
         point(e){if(!canvas)throw Error('地图未加载');const rect=canvas.getBoundingClientRect();return (0,canvasRenderer_1.toWorld)({x:(e.clientX-rect.left)*canvas.width/rect.width,y:(e.clientY-rect.top)*canvas.height/rect.height});},
         get canvas(){return canvas;},
-        commit(){if(!deploySnapshot)return;deploymentCheck(state.units);if(!state.units.some(u=>u.def.team==='ally')||!state.units.some(u=>u.def.team==='enemy'))throw Error('开战至少需要一名我方和一名敌方；若要保留空地图，请点击绿色「保留当前地图并关闭编辑」。');const next={...state,units:state.units.map(u=>({...u,hp:u.def.hp,baseHp:u.def.hp,stunned:false,installedEffects:[]})),turn:{moved:[],acted:[],walked:{}},grabbed:null};deploySnapshot=null;round=1;reset(next);newPhase();paused=false;syncInput();if(running)raf=requestAnimationFrame(frame);}
+        commit(){if(!deploySnapshot)return;deploymentCheck(state.units);if(!state.units.some(u=>u.def.team==='ally')||!state.units.some(u=>u.def.team==='enemy'))throw Error('开战至少需要一名我方和一名敌方；若要保留空地图，请点击绿色「保留当前地图并关闭编辑」。');const next={...state,units:state.units.map(u=>({...u,hp:u.def.hp,baseHp:u.def.hp,stunned:false,installedEffects:[]})),turn:{moved:[],acted:[],walked:{}},grabbed:null};deploySnapshot=null;document.body.classList.remove("arena-editing");round=1;reset(next);newPhase();paused=false;syncInput();if(running)raf=requestAnimationFrame(frame);}
     };
 
 
@@ -11798,7 +11802,7 @@ by('depExportGame').onclick=()=>run(()=>{
  const data=saveDefault();
  // Serialize this complete offline game, stripping only dynamic runtime DOM.
  const copy=document.documentElement.cloneNode(true);
- copy.classList.remove('deploying');copy.querySelector('body')?.classList.remove('deploying');
+ copy.classList.remove('deploying');copy.querySelector('body')?.classList.remove('deploying','arena-editing');
  const app=copy.querySelector('#app');if(app)app.replaceChildren();
  const open=copy.querySelector('#deployOpen');if(open){open.hidden=false;open.textContent='♟ 地图战役编辑';}
  const panel=copy.querySelector('#deployPanel');if(panel){panel.hidden=true;panel.querySelector('#depNotice').textContent='';}
