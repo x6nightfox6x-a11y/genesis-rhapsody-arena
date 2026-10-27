@@ -11,7 +11,7 @@ function tab(which){document.body.classList.toggle('editor-mode',which==='editor
 function setLibrary(open){$('panels').classList.toggle('library-open',open);$('libraryToggle').setAttribute('aria-expanded',String(open));$('libraryToggle').textContent=open?'✕ 收起角色库':'☰ 角色库'}
 $('libraryToggle').onclick=()=>setLibrary(!$('panels').classList.contains('library-open'));
 
-$('testGame').onclick=()=>{try{const deployment=$('arena').contentWindow.DBDeployment;if(deployment?.active){deployment.setDefaultRoster();deployment.commit()}tab('arena');setLibrary(false);document.body.classList.add('testing');status('游戏测试中')}catch(e){status('无法开始测试：'+e.message)}};$('endTest').onclick=()=>{document.body.classList.remove('testing');try{const d=$('arena').contentWindow.DBDeployment;if(d&&!d.active)d.begin();status('已返回部署后台')}catch(e){status('返回后台：'+e.message)}};
+$('testGame').onclick=()=>{try{const deployment=$('arena').contentWindow.DBDeployment;if(deployment?.active){const units=deployment.inspect().units;if(!units.some(u=>u.def.team==='ally')||!units.some(u=>u.def.team==='enemy'))throw Error('开始游戏至少需要一名我方角色和一名敌人');deployment.checkpoint();deployment.cancel()}tab('arena');setLibrary(false);document.body.classList.add('testing');status('游戏测试中')}catch(e){status('无法开始测试：'+e.message)}};$('endTest').onclick=()=>{document.body.classList.remove('testing');try{const d=$('arena').contentWindow.DBDeployment;if(d&&!d.active)d.begin();status('已返回部署后台')}catch(e){status('返回后台：'+e.message)}};
 $('arenaTab').onclick=()=>tab('arena');$('editorTab').onclick=()=>tab('editor');
 let page=0;const pageSize=18;let libraryEntries=[];
 function preview(canvas,card){
@@ -99,6 +99,21 @@ function graRestore(list){const api=$('arena').contentWindow.DBDeployment;graHis
 function graTravel(back){const from=back?graHistory.undo:graHistory.redo,to=back?graHistory.redo:graHistory.undo;const snapshot=from.pop();if(!snapshot)return;const current=graSnapshot();if(current)to.push(current);graRestore(snapshot);graUpdateHistory();status(back?'↶ 已撤销':'↷ 已重做')}
 graUpdateHistory();
 window.addEventListener('keydown',e=>{if(document.body.classList.contains('testing')||!e.ctrlKey||e.altKey||e.metaKey)return;if(e.target.closest?.('input,textarea,[contenteditable=true]'))return;if(e.key.toLowerCase()==='z'){e.preventDefault();graTravel(!e.shiftKey)}else if(e.key.toLowerCase()==='y'){e.preventDefault();graTravel(false)}},true);
+// Deployment's document-capture pointermove/pointerup handler swallows events
+// even when no unit is being dragged. Let the original Arena canvas camera
+// receive middle-button motion. Left-button unit editing stays untouched.
+function graAllowNativeMapPan(w,doc,api,canvas){
+ if(w.__graNativeMapPanEnabled)return;
+ const nativeStop=w.Event.prototype.stopImmediatePropagation;
+ if(typeof nativeStop!=='function')throw Error('浏览器不支持地图事件修复');
+ w.Event.prototype.stopImmediatePropagation=function(){
+   const middleMove=this.type==='pointermove'&&((this.buttons&4)!==0);
+   const middleUp=this.type==='pointerup'&&this.button===1;
+   if(api.active&&this.currentTarget===doc&&this.target===canvas&&(middleMove||middleUp))return;
+   return nativeStop.call(this);
+ };
+ w.__graNativeMapPanEnabled=true;
+}
 function graSetupDeployment(){
  const w=$('arena').contentWindow,d=w.document;
  if(!w.DBDeployment||!w.DBDeployment.canvas){return false}
@@ -106,6 +121,7 @@ function graSetupDeployment(){
  if(canvas.dataset.graBound)return true;
  canvas.dataset.graBound='1';
  try{if(!api.active)api.begin()}catch(e){status('部署模式启动失败：'+e.message);return false}
+ try{graAllowNativeMapPan(w,d,api,canvas)}catch(e){status('地图中键修复失败：'+e.message);console.error(e)}
  // Drag cards from the library onto the map. The game frame shares this site's origin.
  d.addEventListener('dragover',e=>{if(!window.graDraggingId)return;e.preventDefault();e.dataTransfer.dropEffect='copy'},true);
  d.addEventListener('drop',async e=>{
@@ -138,127 +154,8 @@ function graSetupDeployment(){
   }catch(err){console.warn('GRA select failed',err)}
  },true);
 
- // GRA backend: keep deployment editing on the left button, navigate the existing map
- // with the middle button. Arena's battle canvas must NOT be translated with CSS:
- // that would break world coordinates, unit hit-testing, and the fixed 80vw viewport.
- let middlePan=null,panFailed=false;
- const directionTokens={
-   left:['left','west','向左','左移','◀','←','‹','❮','⮜'],
-   right:['right','east','向右','右移','▶','→','›','❯','⮞'],
-   up:['up','north','向上','上移','▲','↑','⌃','⮝'],
-   down:['down','south','向下','下移','▼','↓','⌄','⮟']
- };
- const directionName=(el)=>{
-   const raw=[el.getAttribute('aria-label'),el.getAttribute('title'),
-     el.getAttribute('data-dir'),el.getAttribute('data-direction'),
-     el.getAttribute('data-pan'),el.getAttribute('id'),
-     el.getAttribute('class'),el.textContent]
-     .filter(Boolean).join(' ').trim().toLowerCase();
-   // Priority to explicit direction attributes and named camera-control buttons.
-   for(const [direction,words] of Object.entries(directionTokens)){
-     if(words.some(t=>raw===t||raw.includes('camera-'+t)||raw.includes('camera_'+t)||
-       raw.includes('pan-'+t)||raw.includes('pan_'+t)||
-       raw.includes('move-'+t)||raw.includes('map-'+t)||
-       raw.includes('镜头'+t)||raw.includes('地图'+t)||
-       raw.includes('视角'+t)||raw.includes('方向'+t)))return direction;
-   }
-   for(const [direction,words] of Object.entries(directionTokens)){
-     if(words.some(t=>raw===t||raw.startsWith(t+' ')||raw.endsWith(' '+t)))return direction;
-   }
-   return null;
- };
- let navCache=null;
- const cameraControls=()=>{
-   if(navCache && Object.values(navCache).every(el=>el.isConnected))return navCache;
-   const els=[...d.querySelectorAll('button,[role="button"],[data-direction],[data-pan],input[type="button"]')];
-   // Prioritize buttons in real camera/map navigation groups, but support standalone
-   // arrow controls too (older builds place these in #arenaLeftDock).
-   const groups=new Map();
-   for(const el of els){
-     const dir=directionName(el);if(!dir)continue;
-     let group=el.parentElement;
-     for(let i=0;i<3 && group?.parentElement;i++){
-       const label=((group.id||'')+' '+(group.className?.baseVal||group.className||'')+' '+(group.getAttribute('aria-label')||'')).toLowerCase();
-       if(/camera|nav|direction|pan|map|镜头|视角|地图|方向|dock/.test(label))break;
-       group=group.parentElement;
-     }
-     if(!group)continue;
-     const id=group;
-     if(!groups.has(id))groups.set(id,{});
-     const set=groups.get(id);
-     if(!set[dir])set[dir]=el;
-   }
-   const possibilities=[...groups.entries()].filter(([,v])=>Object.keys(v).length>=3);
-   possibilities.sort((a,b)=>{
-     const score=([g,v])=>{
-       const name=((g.id||'')+' '+(g.className?.baseVal||g.className||'')+' '+(g.getAttribute('aria-label')||'')).toLowerCase();
-       return Object.keys(v).length*10+(/camera|pan|map|nav|镜头|视角|地图/.test(name)?20:0);
-     };
-     return score(b)-score(a);
-   });
-   navCache=possibilities[0]?.[1]||null;
-   return navCache;
- };
- const panStep=dir=>{
-   const control=cameraControls()?.[dir];
-   if(control){control.click();return true}
-   if(!panFailed){
-     panFailed=true;
-     status('⚠ 中键已识别，但没有找到地图方向控制。可在开发者控制台检查 GRAStudioPan。');
-   }
-   return false;
- };
- const isMapTarget=e=>e.target===canvas||
-   !!e.target?.closest?.('.graveyard-camera,.graveyard-game-canvas,#app canvas,[class*="battlefield"],[class*="arena-map"]');
- const endMiddle=e=>{
-   if(!middlePan||e?.pointerId!=null&&middlePan.id!==e.pointerId)return;
-   middlePan=null;
- };
- w.GRAStudioPan={
-   get controls(){return cameraControls()},
-   get active(){return !!middlePan},
-   pan:panStep,
-   diagnostics:()=>({
-     deploymentActive:!!api.active,
-     canvas:canvas?.className,
-     controls:Object.fromEntries(Object.entries(cameraControls()||{}).map(([k,v])=>[k,{
-       tag:v.tagName,label:v.getAttribute('aria-label'),title:v.title,text:v.textContent?.trim().slice(0,45)
-     }]))
-   })
- };
- w.addEventListener('pointerdown',e=>{
-   if(e.button!==1||!api.active||document.body.classList.contains('testing')||!isMapTarget(e))return;
-   middlePan={id:e.pointerId,x:e.clientX,y:e.clientY,dx:0,dy:0};
-   panFailed=false;
-   navCache=null;
-   status('中键已按下：拖动地图视野');
-   e.preventDefault();
-   e.stopImmediatePropagation();
- },true);
- w.addEventListener('pointermove',e=>{
-   if(!middlePan||e.pointerId!==middlePan.id)return;
-   if(!(e.buttons&4)){endMiddle(e);return}
-   middlePan.dx+=e.clientX-middlePan.x;
-   middlePan.dy+=e.clientY-middlePan.y;
-   middlePan.x=e.clientX;middlePan.y=e.clientY;
-   const threshold=14;
-   let n=0;
-   while(Math.abs(middlePan.dx)>=threshold&&n++<12){
-     if(!panStep(middlePan.dx>0?'left':'right')){middlePan.dx=0;break}
-     middlePan.dx+=middlePan.dx>0?-threshold:threshold;
-   }
-   n=0;
-   while(Math.abs(middlePan.dy)>=threshold&&n++<12){
-     if(!panStep(middlePan.dy>0?'up':'down')){middlePan.dy=0;break}
-     middlePan.dy+=middlePan.dy>0?-threshold:threshold;
-   }
-   e.preventDefault();
-   e.stopImmediatePropagation();
- },true);
- w.addEventListener('pointerup',endMiddle,true);
- w.addEventListener('pointercancel',endMiddle,true);
- w.addEventListener('blur',()=>middlePan=null);
- w.addEventListener('auxclick',e=>{if(e.button===1&&isMapTarget(e))e.preventDefault()},true);
+ // The original game camera controls middle-mouse panning, in both modes.
+ // Never compete with that camera by installing a second middle-button drag handler.
  const removeSelected=e=>{
   if(!['Delete','Backspace'].includes(e.key)||document.body.classList.contains('testing')||!api.active)return;
   const target=e.target;
