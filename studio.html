@@ -59,7 +59,7 @@ async function editCard(id){
  const entry=await get(id);if(!entry)throw Error('角色不存在');
  const w=$('editor').contentWindow,input=w.document.getElementById('cardFile');
  if(!input||!input.onchange)throw Error('ID Studio 尚未加载完成');
- const file=new File([JSON.stringify(entry.card)],id+'.downbeat.json',{type:'application/json'});
+ const file=new File([JSON.stringify({...entry.card,graCharacterId:id})],id+'.downbeat.json',{type:'application/json'});
  const transfer=new DataTransfer();transfer.items.add(file);input.files=transfer.files;
  await input.onchange({target:input});currentEditingId=id;
  tab('editor');setLibrary(false);
@@ -73,7 +73,7 @@ async function saveCurrent(play){
  if(typeof w.normalized!=='function')throw Error('ID Studio 未载入');
  const obj=w.normalized(),card=obj?.card||obj;
  if(!card||typeof card!=='object'||card.format!=='downbeat-character')throw Error('未能获取有效的角色卡');
- const id=currentEditingId||String(card.name||'id-'+Date.now()).replace(/[^\w\u4e00-\u9fff-]/g,'_').slice(0,100);
+ const id=card.graCharacterId||String(card.name||'id-'+Date.now()).replace(/[^\w\u4e00-\u9fff-]/g,'_').slice(0,100);
  await save(id,card);currentEditingId=id;await render();
  status('✓ 已保存 '+(card.name||id)+' 到 GRA 本地角色库');
  if(play)await apply(id);
@@ -207,7 +207,8 @@ async function loadPublishedCards(){
 }
 window.GRAStudio={
  async getDraft(id){
-  const entry=id?await get(id):await saveCurrent(false);if(!entry)throw Error('角色草稿不可用');
+  let entry=id?await get(id):await saveCurrent(false);if(!entry)throw Error('角色草稿不可用');
+  if(entry.card.graCharacterId!==entry.id)entry=await save(entry.id,{...entry.card,graCharacterId:entry.id});
   const runtime=$('arena').contentWindow.ArenaRuntime;
   if(runtime)await runtime.prepare(entry.card);else $('editor').contentWindow.DBCard.validate(entry.card);
   return {id:entry.id,card:entry.card,sourceSHA:entry.sourceSHA||publishedSources.get(entry.id)?.sha};

@@ -221,12 +221,12 @@ $('chooseExportFolder').onclick=()=>chooseCharacterFolder();
 if(typeof window.showDirectoryPicker==='function')recoverFolder();
 else folderStatus('当前浏览器不支持直接保存目录，导出将进入浏览器的下载位置。');
 function safeName(){return card.name.replace(/[^\p{L}\p{N}_-]+/gu,'_').slice(0,40)||'character';}
-function normalized(){const c=canvas(256*24,256*4),ctx=c.getContext('2d');let max=Math.max(...dirs.map(d=>card.animations[d].length));c.width=256*max;const output=JSON.parse(JSON.stringify(card));dirs.forEach((d,row)=>{output.animations[d]=card.animations[d].map((f,n)=>{DBCard.draw(ctx,processed,card,d,n,n*256+128,row*256+244,220);return {x:n*256,y:row*256,w:256,h:256,dx:0,dy:0,anchorX:128,anchorY:246,duration:f.duration,seconds:frameSeconds(f)};});});output.sheet=c.toDataURL('image/png');output.layout={cellWidth:256,cellHeight:256,rows:dirs,anchor:{x:0.5,y:1}};return {card:output,canvas:c};}
+function normalized(){if(!card.graCharacterId)card.graCharacterId=String(card.name||'character').replace(/[^\w\u4e00-\u9fff-]/g,'_').slice(0,100);const c=canvas(256*24,256*4),ctx=c.getContext('2d');let max=Math.max(...dirs.map(d=>card.animations[d].length));c.width=256*max;const output=JSON.parse(JSON.stringify(card));dirs.forEach((d,row)=>{output.animations[d]=card.animations[d].map((f,n)=>{DBCard.draw(ctx,processed,card,d,n,n*256+128,row*256+244,220);return {x:n*256,y:row*256,w:256,h:256,dx:0,dy:0,anchorX:128,anchorY:246,duration:f.duration,seconds:frameSeconds(f)};});});output.sheet=c.toDataURL('image/png');output.layout={cellWidth:256,cellHeight:256,rows:dirs,anchor:{x:0.5,y:1}};return {card:output,canvas:c};}
 async function exportCard(){try{if(!await prepareExportDirectory())return;DBCard.validate(card);await download(new Blob([JSON.stringify(card,null,2)],{type:'application/json'}),safeName()+'.downbeat.json');}catch(e){toast('导出失败：'+e.message);}}
 async function restore(s){const v=JSON.parse(s);if(window.DBMigrateCard?.(v.card)){v.original=v.card.sheet;v.key=false;}const img=await DBCard.decode(v.card),src=await DBCard.load(v.original);card=v.card;source=src;original=v.original;processed=img;$('keyBg').checked=v.key;$('threshold').value=v.threshold;$('cols').value=v.cols;$('rows').value=v.rows;dirs.forEach((d,i)=>$(d+'Row').value=v.mapping[i]);selected=0;$('sourcePreview').src=card.sheet;sync();}
-async function loadLibraryCard(index){card=JSON.parse(JSON.stringify(window.DBCharacterLibrary[index]));original=card.sheet;source=await DBCard.decode(card);processed=source;$('keyBg').checked=false;$('cols').value=8;$('rows').value=4;selected=0;dir='down';$('sourcePreview').src=card.sheet;$('dimensions').textContent='8 FRAMES · 无脚下阴影 · 脚底已对齐';sync();}
+async function loadLibraryCard(index){card=JSON.parse(JSON.stringify(window.DBCharacterLibrary[index]));card.graCharacterId=card.graCharacterId||card.name;original=card.sheet;source=await DBCard.decode(card);processed=source;$('keyBg').checked=false;$('cols').value=8;$('rows').value=4;selected=0;dir='down';$('sourcePreview').src=card.sheet;$('dimensions').textContent='8 FRAMES · 无脚下阴影 · 脚底已对齐';sync();}
 async function defaults(){
-  card={format:'downbeat-character',version:1,name:'未命名角色',description:'',target:'leon',fps:8,sheet:DEFAULT_SHEET,
+  card={format:'downbeat-character',version:1,graCharacterId:'character-'+(crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)),name:'未命名角色',description:'',target:'leon',fps:8,sheet:DEFAULT_SHEET,
     animations:Object.fromEntries(dirs.map((d,i)=>[d,[{x:0,y:i*256,w:256,h:256,dx:0,dy:0,duration:1}]])),
     layout:{directions:dirs,pixelsPerUnit:256,anchor:{x:.5,y:1},type:'trimmed-atlas'},
     appearance:{team:'ally',outlineColor:'#49a5ff',outlineWidth:3,outlineEnabled:true}};
@@ -751,7 +751,7 @@ async function renderIdLibrary(){
 async function selectIdEntry(entry){
  // Keep edits when switching between cards; source files change only on export.
  if(idSelected&&card)idDrafts.set(idSelected,snapshot());
- const data=JSON.parse(JSON.stringify(entry.data));const img=await DBCard.decode(data);
+ const data=JSON.parse(JSON.stringify(entry.data));data.graCharacterId=data.graCharacterId||entry.file.replace(/\.downbeat\.json$/i,'');const img=await DBCard.decode(data);
  if(card)remember();
  if(idDrafts.has(entry.file))await restore(idDrafts.get(entry.file));
  else{card=data;original=data.sheet;source=img;processed=img;selected=0;dir='down';elapsed=0;$('keyBg').checked=false;$('cols').value=data.layout?.columns||8;$('rows').value=4;$('sourcePreview').src=data.sheet;$('dimensions').textContent='角色 ID · 四方向动画';sync();}

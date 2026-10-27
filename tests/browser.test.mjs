@@ -164,6 +164,19 @@ test('standalone character editor can publish without opening the Arena backend'
   await page.locator('[data-result]').waitFor();assert.equal(github.library().characters.length,1);
   assert.equal(await page.locator('#githubToken').inputValue(),'');
 });
+test('creating a character after editing Jay publishes a new ID without overwriting Jay',async t=>{
+  const {page}=await studio(t),github=new FakeGitHub();await routeGitHub(page,github);
+  await page.evaluate(async()=>{await GRAStudio.ready;await editCard('Jay');});
+  const editor=page.frames().find(frame=>frame.url().endsWith('/Downbeat_ID_Card_Studio.html'));
+  await editor.locator('#idAdd').click();await editor.locator('#idNew').click();
+  await editor.locator('#name').fill('全新发布角色');await editor.locator('#name').press('Tab');
+  await page.locator('#publishGitHub').click();await page.locator('#githubToken').fill(TOKEN);await page.locator('[data-connect-submit]').click();await page.locator('[data-result]').waitFor();
+  const published=github.library().characters[0];assert.notEqual(published.id,'Jay');assert.equal(published.name,'全新发布角色');
+  assert.equal(await page.evaluate(async()=>(await get('Jay')).card.name),'Jay');
+  await page.locator('[data-close]').click();await editor.locator('#name').fill('改名后的发布角色');await editor.locator('#name').press('Tab');
+  await page.locator('#publishGitHub').click();await page.locator('[data-result]').waitFor();
+  assert.equal(github.library().characters.length,1);assert.equal(github.library().characters[0].id,published.id);assert.equal(github.library().characters[0].name,'改名后的发布角色');
+});
 for (const mode of ['melee', 'ranged']) test(`Jay ${mode} aims and damages an enemy`, async t => {
   const { page, frame } = await studio(t);
   await frame.evaluate(async mode => {
