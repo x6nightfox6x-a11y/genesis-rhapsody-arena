@@ -41,6 +41,12 @@ npm run inspect -- --id --find "function animate"
 
 ## 本地测试
 
+Windows 便携开发包使用 `START-STUDIO.cmd`，内附 Node.js，只需解压即可启动完整 Studio。`node tools/portable.mjs` 自动选择 4173–4193 中空闲端口并打开浏览器；`GRA_NO_OPEN=1` 用于独立验证，服务器仍仅监听本机。
+
+迁移电脑前在 Studio 使用“迁移备份”，新电脑通过“恢复备份”导入。`studio/transfer.js` 迁移角色库、编辑器自动存档和当前地图布阵，只读取明确允许的本地存储键，排除登录凭证。备份不包含战斗动作、临时 HP/AP。源码文件、浏览器草稿和 GitHub 发布是不同的保存位置，复制源码不会自动复制浏览器草稿。
+
+Windows x64 上运行 `node tools/package-studio.mjs 新输出目录 对应Node许可证文件` 重建便携开发文件夹，再压缩整个目录。目录包含源码、说明、测试和当前官方 Node 运行程序，排除 `.git`、个人凭证、`node_modules` 和生成输出。Mac/Linux 需要自行安装 Node 22+ 后启动同一源码。
+
 `npm test` 先检查内联 JavaScript 语法、全部 JSON、静态链接、战役 ID/入口一致性及角色招式的动作绑定，再以临时端口测试实际发布包。
 
 浏览器检查战役入口、80vw 固定战场、中键平移不改变单位位置、后台/游戏切换不丢队伍，以及 Jay 近战和枪击进入瞄准并造成伤害。测试准备明确的双方位置，避免默认站位不在射程内影响结果；使用独立浏览器，不读取或覆盖日常存档。

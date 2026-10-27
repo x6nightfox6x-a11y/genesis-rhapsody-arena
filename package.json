@@ -6,6 +6,8 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "dev": "node tools/serve.mjs",
+    "studio": "node tools/portable.mjs",
+    "package:studio": "node tools/package-studio.mjs",
     "check": "node tools/check.mjs",
     "inspect": "node tools/inspect.mjs",
     "benchmark": "node tools/benchmark.mjs",
