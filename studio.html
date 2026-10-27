@@ -137,6 +137,62 @@ function graSetupDeployment(){
    if(hit){status('已选中 '+hit.def.name+' · 按 Delete 删除')}
   }catch(err){console.warn('GRA select failed',err)}
  },true);
+
+ // Middle-mouse navigation for the embedded Arena. Keep left-click unit editing intact.
+ // Uses the Arena's existing directional map controls rather than moving its canvas
+ // with CSS (which would desynchronise the battle's hit testing).
+ let middlePan=null;
+ const cameraControl=(direction)=>{
+   const words={left:['左','←','left'],right:['右','→','right'],up:['上','↑','up'],down:['下','↓','down']}[direction];
+   const candidates=[...d.querySelectorAll('button,[role="button"]')];
+   return candidates.find(el=>{
+     const container=el.closest('[id*="camera" i],[class*="camera" i],[id*="navigation" i],[class*="navigation" i],[id*="map-control" i],[class*="map-control" i]');
+     if(!container)return false;
+     const text=[el.getAttribute('aria-label'),el.getAttribute('title'),el.dataset.direction,el.textContent].filter(Boolean).join(' ').trim().toLowerCase();
+     return words.some(w=>text===w||text.includes('pan '+w)||text.includes('move '+w)||text.includes('地图'+w)||text.includes('向'+w));
+   });
+ };
+ let navWarning=false;
+ const stepMap=(direction)=>{
+   const button=cameraControl(direction);
+   if(button){button.click();return true}
+   if(!navWarning){navWarning=true;status('中键拖动：未找到 Arena 地图方向控制，请检查地图控制按钮')}
+   return false;
+ };
+ const stopMiddle=e=>{
+   if(!middlePan)return;
+   if(e?.pointerId!=null&&middlePan.id!==e.pointerId)return;
+   middlePan=null;
+ };
+ w.addEventListener('pointerdown',e=>{
+   if(e.button!==1||!api.active||document.body.classList.contains('testing'))return;
+   if(!e.target.closest?.('.graveyard-camera')&&e.target!==canvas)return;
+   middlePan={id:e.pointerId,x:e.clientX,y:e.clientY,dx:0,dy:0};
+   e.preventDefault();e.stopImmediatePropagation();
+ },true);
+ w.addEventListener('pointermove',e=>{
+   if(!middlePan||e.pointerId!==middlePan.id)return;
+   if(!(e.buttons&4)){stopMiddle(e);return}
+   middlePan.dx+=e.clientX-middlePan.x;
+   middlePan.dy+=e.clientY-middlePan.y;
+   middlePan.x=e.clientX;middlePan.y=e.clientY;
+   const threshold=18;
+   let steps=0;
+   while(Math.abs(middlePan.dx)>=threshold&&steps++<12){
+     if(!stepMap(middlePan.dx>0?'left':'right'))break;
+     middlePan.dx+=middlePan.dx>0?-threshold:threshold;
+   }
+   steps=0;
+   while(Math.abs(middlePan.dy)>=threshold&&steps++<12){
+     if(!stepMap(middlePan.dy>0?'up':'down'))break;
+     middlePan.dy+=middlePan.dy>0?-threshold:threshold;
+   }
+   e.preventDefault();e.stopImmediatePropagation();
+ },true);
+ w.addEventListener('pointerup',stopMiddle,true);
+ w.addEventListener('pointercancel',stopMiddle,true);
+ w.addEventListener('blur',()=>middlePan=null);
+ w.addEventListener('auxclick',e=>{if(e.button===1&&e.target.closest?.('.graveyard-camera'))e.preventDefault()},true);
  const removeSelected=e=>{
   if(!['Delete','Backspace'].includes(e.key)||document.body.classList.contains('testing')||!api.active)return;
   const target=e.target;
