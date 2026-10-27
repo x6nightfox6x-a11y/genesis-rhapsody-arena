@@ -314,3 +314,31 @@ test('collision view hides artwork without changing the shared map and survives 
   assert.ok(restored.every((value,index)=>Math.abs(value-painted[index])<=4),'restoring artwork must restore its pixels (allow minor raster rounding after camera resize)');
   assert.deepEqual(await frame.evaluate(()=>DBDeployment.inspect()),before);
 });
+
+test('Studio migration transfers drafts and map positions into a fresh browser without credentials', async t => {
+  const {page,frame}=await studio(t);
+  await page.evaluate(async()=>{
+    await GRAStudio.ready;const jay=await get('Jay');
+    await save('travel-draft',{...jay.card,name:'跨电脑草稿',graCharacterId:'travel-draft'});
+    localStorage.setItem('github-token','must-never-travel');
+    localStorage.setItem('unrelated-private-setting','must-never-travel');
+  });
+  const expected=await frame.evaluate(()=>{
+    const units=DBDeployment.inspect().units;
+    const ally=units.find(u=>u.def.team==='ally');ally.def.name='迁移布阵';ally.pos.x+=0.2;
+    DBDeployment.replace(units);return {name:ally.def.name,x:ally.pos.x};
+  });
+  const downloading=page.waitForEvent('download');await page.locator('#exportStudioBackup').click();
+  const download=await downloading,file=path.join(root,'test-results','transfer-backup.json');await download.saveAs(file);
+  const text=await readFile(file,'utf8'),data=JSON.parse(text);
+  assert.equal(text.includes('must-never-travel'),false);
+  assert.ok(data.cards.some(entry=>entry.id==='travel-draft'));
+  const context=await browser.newContext(),other=await context.newPage();t.after(()=>context.close());
+  await other.goto(preview.url+'/studio.html');await other.waitForFunction(()=>GRAStudio.ready);
+  await Promise.all([other.waitForNavigation({waitUntil:'load'}),other.locator('#studioBackupFile').setInputFiles(file)]);
+  await other.waitForFunction(async()=>{await GRAStudio.ready;return !!(await get('travel-draft'));});
+  await other.waitForFunction(()=>document.getElementById('arena').contentWindow.ArenaCampaignLoaded);
+  const actual=await other.evaluate(()=>{const a=document.getElementById('arena').contentWindow.DBDeployment.inspect().units.find(u=>u.def.team==='ally');return {name:a.def.name,x:a.pos.x};});
+  assert.deepEqual(actual,expected);
+  assert.equal(await other.evaluate(()=>localStorage.getItem('github-token')),null);
+});
