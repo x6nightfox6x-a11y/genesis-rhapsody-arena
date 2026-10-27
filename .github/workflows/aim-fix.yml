@@ -1,0 +1,71 @@
+name: Apply Arena mouse preview optimization
+on:
+  push:
+    branches: [fix/mouse-aim-preview-lag-20261027]
+    paths: [.github/workflows/aim-fix.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Coalesce high-frequency mouse aiming previews
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          changes = [
+            ("    swipe = null;\n    constructor(canvas, handlers) {",
+             """    swipe = null;
+    // Coalesce high-Hz mouse moves before expensive combat/path previews.
+    mousePreviewFrame = 0;
+    pendingMousePreview = null;
+    lastMousePreviewAt = -Infinity;
+    flushMousePreview = (now) => {
+        this.mousePreviewFrame = 0;
+        if (!this.enabled || !this.pendingMousePreview) return;
+        if (now - this.lastMousePreviewAt < 30) {
+            this.mousePreviewFrame = requestAnimationFrame(this.flushMousePreview);
+            return;
+        }
+        const point = this.pendingMousePreview;
+        this.pendingMousePreview = null;
+        this.lastMousePreviewAt = now;
+        this.handlers.onCursor(this.handlers.showAimCursor?.() ? point : null);
+        this.handlers.onMove(point);
+    };
+    constructor(canvas, handlers) {"""),
+            ("    detach() {\n        this.canvas.removeEventListener('pointermove', this.move);",
+             """    detach() {
+        cancelAnimationFrame(this.mousePreviewFrame);
+        this.mousePreviewFrame = 0;
+        this.pendingMousePreview = null;
+        this.canvas.removeEventListener('pointermove', this.move);"""),
+            ("        if (!enabled) {\n            this.canvas.style.cursor = '';",
+             """        if (!enabled) {
+            cancelAnimationFrame(this.mousePreviewFrame);
+            this.mousePreviewFrame = 0;
+            this.pendingMousePreview = null;
+            this.canvas.style.cursor = '';"""),
+            ("            this.handlers.onCursor(aiming ? point : null);\n            this.handlers.onMove(point);\n            return;",
+             """            this.pendingMousePreview = point;
+            if (!this.mousePreviewFrame)
+                this.mousePreviewFrame = requestAnimationFrame(this.flushMousePreview);
+            return;""")
+          ]
+          for name in ('index.html', 'Arena game.html'):
+              p=Path(name); content=p.read_text()
+              for old,new in changes:
+                  assert content.count(old)==1, (name, old)
+                  content=content.replace(old,new)
+              p.write_text(content)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html "Arena game.html"
+          git rm .github/workflows/aim-fix.yml
+          git commit -m "fix: coalesce mouse aiming previews to reduce lag"
+          git push
