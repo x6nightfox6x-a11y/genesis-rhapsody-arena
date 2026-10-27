@@ -5,7 +5,7 @@
     {
       "id": "arena-001",
       "title": "Arena · Campaign 001",
-      "description": "原版 Arena 地图和战斗数据（兼容模式）",
+      "description": "教堂地图：独立地图、背景与默认布阵",
       "engine": "Arena game.html",
       "data": "campaigns/arena-001/campaign.json"
     }

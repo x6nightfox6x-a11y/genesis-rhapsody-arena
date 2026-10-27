@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { root } from '../tools/site.mjs';
 import { startServer } from '../tools/serve.mjs';
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -12,9 +14,10 @@ before(async () => {
   browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
 });
 after(async () => { await browser?.close(); if (preview) await new Promise(resolve => preview.server.close(resolve)); });
-async function studio(t) {
+async function studio(t, configure) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage(), errors = [];
+  if (configure) await configure(page);
   const engineRequests = [];
   page.on('request', request => { if (request.resourceType() === 'document' && /Arena(?:%20| )game\.html/.test(request.url())) engineRequests.push(request.url()); });
   page.on('pageerror', error => errors.push(error.message));
@@ -24,7 +27,7 @@ async function studio(t) {
     await context.close(); assert.deepEqual(errors, [], 'browser runtime errors');
   });
   await page.goto(preview.url + '/studio.html');
-  await page.waitForFunction(() => { const w = document.getElementById('arena').contentWindow; return w.DBDeployment?.active && w.document.querySelector('canvas.graveyard-game-canvas'); });
+  await page.waitForFunction(() => { const w = document.getElementById('arena').contentWindow; return w.ArenaCampaignLoaded && w.DBDeployment?.active && w.document.querySelector('canvas.graveyard-game-canvas')?.dataset.graBound; });
   const frame = page.frames().find(f => /Arena(?:%20| )game\.html/.test(f.url()));
   assert.ok(frame, 'Studio must load the canonical engine');
   assert.equal(engineRequests.length, 1, 'campaign startup should load the engine once');
@@ -41,6 +44,10 @@ async function screenPoint(frame, team) {
 test('Studio campaign, fixed viewport, map pan and test/editor round trip', async t => {
   const { page, frame } = await studio(t);
   assert.equal(await page.locator('#campaignSelect').inputValue(), 'arena-001');
+  assert.equal(await frame.locator('#arenaDisplaySettings .db-cinema-controls').count(), 1, 'presentation initializes after async map startup');
+  await page.locator('#studioLang').selectOption('en');
+  await frame.waitForFunction(() => document.querySelector('.hud-bar [data-mode="move"]').textContent.startsWith('Move'));
+  await page.locator('#studioLang').selectOption('zh');
   const geometry = await frame.evaluate(() => { const r = document.querySelector('.graveyard-camera').getBoundingClientRect(); return { x: r.x, width: r.width, height: r.height, expectedHeight: innerHeight }; });
   assert.equal(geometry.width, 1152); assert.equal(geometry.x, 144); assert.equal(geometry.height, geometry.expectedHeight);
   const before = await frame.evaluate(() => DBDeployment.inspect());
@@ -71,4 +78,95 @@ for (const mode of ['melee', 'ranged']) test(`Jay ${mode} aims and damages an en
   const hp = await frame.evaluate(() => DBDeployment.inspect().units.find(u => u.def.team === 'enemy').hp);
   await page.mouse.click(target.x, target.y);
   await frame.waitForFunction(hp => DBDeployment.inspect().units.find(u => u.def.team === 'enemy').hp < hp, hp);
+});
+
+test('editing only map JSON changes shared game geometry and survives restart', async t => {
+  const data = JSON.parse(await readFile(path.join(root, 'campaigns/arena-001/map.json'), 'utf8'));
+  data.arena.width = 19; data.arena.height = 38; data.arena.obstacles.push({ id: 'test-pillar', x: 1, y: 25, w: 0.5, h: 0.5 });
+  const { page, frame } = await studio(t, async page => {
+    await page.route('**/campaigns/arena-001/map.json', route => route.fulfill({ json: data }));
+  });
+  const arena = await frame.evaluate(() => DBDeployment.inspect().arena);
+  assert.deepEqual(arena, data.arena);
+  const collision = await frame.evaluate(() => {
+    const units = DBDeployment.inspect().units; units[0].pos = { x: 1.25, y: 25.25 };
+    try { DBDeployment.replace(units); return null; } catch (error) { return error.message; }
+  });
+  assert.match(collision, /墙壁|障碍物/, 'new JSON obstacle must affect the same collision world');
+  await page.locator('#testGame').click();
+  assert.deepEqual(await frame.evaluate(() => DBDeployment.inspect().arena), arena);
+  await frame.locator('.db-select-trigger').click(); await frame.locator('#arenaRestartPanel [data-restart]').click();
+  assert.deepEqual(await frame.evaluate(() => DBDeployment.inspect().arena), arena);
+});
+
+test('campaign selection loads the selected descriptor and isolates its map', async t => {
+  const manifest = JSON.parse(await readFile(path.join(root, 'campaigns/manifest.json'), 'utf8'));
+  manifest.campaigns.push({ id: 'test-campaign', title: 'Test map', engine: 'Arena game.html', data: 'campaigns/test/campaign.json' });
+  const data = JSON.parse(await readFile(path.join(root, 'campaigns/arena-001/map.json'), 'utf8'));
+  data.id = 'test-map'; data.name = 'Test map'; data.arena.artMap = 'test-map'; data.arena.width = 19;
+  data.initialCampaign.map = 'test-map'; data.background = '../arena-001/background.png';
+  const { page } = await studio(t, async page => {
+    await page.route('**/campaigns/manifest.json', route => route.fulfill({ json: manifest }));
+    await page.route('**/campaigns/test/campaign.json', route => route.fulfill({ json: { format: 'gra-campaign', version: 1, id: 'test-campaign', map: 'map.json', engine: '../../Arena game.html' } }));
+    await page.route('**/campaigns/test/map.json', route => route.fulfill({ json: data }));
+  });
+  await page.locator('#campaignSelect').selectOption('test-campaign');
+  await page.waitForFunction(() => { const w = document.getElementById('arena').contentWindow; return w.ArenaCampaignLoaded && w.ArenaMap.data.id === 'test-map' && w.DBDeployment.active; });
+  const selected = page.frames().find(frame => frame.url().includes('campaign=test-campaign'));
+  assert.equal(await selected.evaluate(() => DBDeployment.inspect().arena.width), 19);
+  await page.locator('#campaignSelect').selectOption('arena-001');
+  await page.waitForFunction(() => { const w = document.getElementById('arena').contentWindow; return w.ArenaCampaignLoaded && w.ArenaMap.data.id === 'arena-cathedral'; });
+});
+
+test('existing cathedral saved formations survive map extraction', async t => {
+  const map = JSON.parse(await readFile(path.join(root, 'campaigns/arena-001/map.json'), 'utf8'));
+  const saved = map.initialCampaign; saved.units[0].name = 'Existing saved ally'; saved.units[0].x += 0.2;
+  const { frame } = await studio(t, async page => {
+    await page.addInitScript(saved => {
+      if (/Arena(?:%20| )game\.html/.test(location.pathname)) localStorage.setItem('arena-cathedral-blank-v2:' + encodeURIComponent(location.pathname), JSON.stringify(saved));
+    }, saved);
+  });
+  const ally = await frame.evaluate(() => DBDeployment.inspect().units.find(unit => unit.def.team === 'ally'));
+  assert.equal(ally.def.name, 'Existing saved ally'); assert.equal(ally.pos.x, saved.units[0].x);
+});
+
+test('full HTML export keeps map and artwork with network disabled', async t => {
+  const { page } = await studio(t);
+  await page.goto(preview.url + '/Arena%20game.html');
+  await page.waitForFunction(() => window.ArenaCampaignLoaded);
+  await page.locator('#deployOpen').click();
+  const original = await page.evaluate(() => DBDeployment.inspect());
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#depExportGame').click();
+  const download = await downloadPromise;
+  const file = path.join(root, 'test-results', 'standalone-arena.html');
+  await mkdir(path.dirname(file), { recursive: true }); await download.saveAs(file);
+  const offline = await page.context().newPage(), requests = [];
+  offline.on('request', request => { if (/^https?:/.test(request.url())) requests.push(request.url()); });
+  await offline.context().setOffline(true);
+  await offline.goto(pathToFileURL(file).href);
+  await offline.waitForFunction(() => window.ArenaCampaignLoaded);
+  assert.deepEqual(await offline.evaluate(() => DBDeployment.inspect()), original);
+  assert.ok(await offline.evaluate(() => ArenaMap.data.background.startsWith('data:image/png;base64,')));
+  assert.equal(await offline.locator('#arena-map-runtime').getAttribute('src'), null);
+  assert.deepEqual(requests, [], 'standalone export must not fetch map, schema or artwork');
+  const again = offline.waitForEvent('download'); await offline.locator('#deployOpen').click(); await offline.locator('#depExportGame').click(); await again;
+  await offline.close();
+});
+
+test('missing or invalid map shows a clear error without starting another map', async t => {
+  const context = await browser.newContext(), page = await context.newPage(); t.after(() => context.close());
+  await page.route('**/campaigns/arena-001/map.json', route => route.fulfill({ status: 404, body: 'missing' }));
+  await page.goto(preview.url + '/Arena%20game.html');
+  await page.locator('#arena-map-error').waitFor();
+  assert.equal(await page.locator('canvas.graveyard-game-canvas').count(), 0);
+  assert.match(await page.locator('#arena-map-error').innerText(), /404/);
+});
+for (const failure of ['invalid-map', 'missing-background']) test(`map startup stops for ${failure}`, async t => {
+  const context = await browser.newContext(), page = await context.newPage(); t.after(() => context.close());
+  if (failure === 'invalid-map') await page.route('**/campaigns/arena-001/map.json', route => route.fulfill({ json: { format: 'gra-map', version: 1, id: 'bad', arena: { width: -1 } } }));
+  else await page.route('**/campaigns/arena-001/background.png', route => route.fulfill({ status: 404, body: 'missing' }));
+  await page.goto(preview.url + '/Arena%20game.html');
+  await page.locator('#arena-map-error').waitFor();
+  assert.equal(await page.locator('canvas.graveyard-game-canvas').count(), 0);
 });
